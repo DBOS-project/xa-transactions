@@ -53,14 +53,20 @@ public class XAConnection implements ApiaryConnection {
         // TODO: transaction manager does 2PC here to commit or abort the transaction.
 
         try {
+            // Start XA transaction in underlying databases
             getXAConnection(PostgresDBType).XAStart(xid);
             getXAConnection(MySQLDBType).XAStart(xid);
             // The function would contain transactions across multiple databases.
             f = workerContext.getFunction(functionName).apiaryRunFunction(ctxt, inputs);
+            // End XA transaction in underlying databases
             getXAConnection(PostgresDBType).XAEnd(xid);
             getXAConnection(MySQLDBType).XAEnd(xid);
             ended =true;
+
+            // Prepare-phase
             if (getXAConnection(PostgresDBType).XAPrepare(xid) && getXAConnection(MySQLDBType).XAPrepare(xid)) {
+                // TODO: persist commit decision ?
+                // Commit-phase
                 getXAConnection(PostgresDBType).XACommit(xid);
                 getXAConnection(MySQLDBType).XACommit(xid);
                 committed = true;
@@ -74,6 +80,8 @@ public class XAConnection implements ApiaryConnection {
                 getXAConnection(PostgresDBType).XAEnd(xid);
                 getXAConnection(MySQLDBType).XAEnd(xid);
             }
+            // TODO: persist abort decision ?
+            // Rollback XA transaction in underlying databases
             getXAConnection(PostgresDBType).XARollback(xid);
             getXAConnection(MySQLDBType).XARollback(xid);
         }

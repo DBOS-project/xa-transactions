@@ -22,5 +22,5 @@ public abstract interface XADBConnection {
 
     public abstract void executeUpdate(String procedure, Object... input) throws SQLException;
 
-    public abstract ResultSet executeQuery(String procedure, Object... input) throws SQLException;
+    public abstract ResultSet executeQuery(String procedure, Object... input) throws SQLException;    
 }
