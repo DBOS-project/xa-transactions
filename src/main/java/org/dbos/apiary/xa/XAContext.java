@@ -6,24 +6,32 @@ import org.dbos.apiary.function.WorkerContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.dbos.apiary.xa.MySQLXAConnection;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 
 public class XAContext extends ApiaryContext {
     private static final Logger logger = LoggerFactory.getLogger(XAContext.class);
-
-    public XAContext(WorkerContext workerContext, String service, long execID, long functionID) {
+    private XAConnection xaConn;
+    public XAContext(XAConnection xaConn, WorkerContext workerContext, String service, long execID, long functionID) {
         super(workerContext, service, execID, functionID);
+        this.xaConn = xaConn;
     }
 
-    public void executeUpdate(String procedure, Object... input) throws SQLException {
+    public void executeUpdate(String DBType, String procedure, Object... input) throws SQLException {
         // TODO: implement executing updates here.
+        xaConn.getXAConnection(DBType).executeUpdate(procedure, input);
     }
 
-    public ResultSet executeQuery(String procedure, Object... input) throws SQLException {
-        // TODO: implement executing queries here.
+    public void recordExecution(org.dbos.apiary.function.FunctionOutput arg0) {}
+
+    public org.dbos.apiary.function.FunctionOutput checkPreviousExecution() {
         return null;
+    }
+
+    public ResultSet executeQuery(String DBType, String procedure, Object... input) throws SQLException {
+        return xaConn.getXAConnection(DBType).executeQuery(procedure, input);
     }
 
     @Override

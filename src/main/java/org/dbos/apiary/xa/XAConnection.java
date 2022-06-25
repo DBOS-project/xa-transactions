@@ -8,14 +8,36 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
 public class XAConnection implements ApiaryConnection {
 
+    private AtomicLong xidCounter = new AtomicLong(1);
     private static final Logger logger = LoggerFactory.getLogger(XAConnection.class);
+    public static String PostgresDBType = "Postgres";
+    public static String MySQLDBType = "MySQL";
+    XADBConnection postgresConnection;
+    XADBConnection mysqlConnection;
+    
+    public XADBConnection getXAConnection(String DBType) {
+        if (DBType.equals(PostgresDBType)) {
+            return postgresConnection;
+        } else if (DBType.equals(MySQLDBType)) {
+            return mysqlConnection;
+        } else {
+            return null;
+        }
+    }
 
-    public XAConnection(String hostname, Integer port, String databaseName, String databaseUsername, String databasePassword) throws SQLException {
+    public XAConnection(XADBConnection postgresConnection, XADBConnection mysqlConnection) throws SQLException {
+        assert(postgresConnection != null);
+        assert(mysqlConnection != null);
+        this.postgresConnection = postgresConnection;
+        this.mysqlConnection = mysqlConnection;
         // TODO: implement building connections to databases.
         // Please refer to the implementation of PostgresConnection.
     }
@@ -23,15 +45,38 @@ public class XAConnection implements ApiaryConnection {
     @Override
     public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, Object... inputs) throws Exception {
         // TODO: may pass more parameters to XAContext.
-        XAContext ctxt = new XAContext(workerContext, service, execID, functionID);
+        XAContext ctxt = new XAContext(this, workerContext, service, execID, functionID);
+        ApiaryXID xid  = ApiaryXID.fromLong(xidCounter.getAndIncrement());
         FunctionOutput f = null;
+        boolean committed = false;
+        
+        // TODO: transaction manager does 2PC here to commit or abort the transaction.
+
         try {
+            getXAConnection(PostgresDBType).XAStart(xid);
+            getXAConnection(MySQLDBType).XAStart(xid);
             // The function would contain transactions across multiple databases.
             f = workerContext.getFunction(functionName).apiaryRunFunction(ctxt, inputs);
+            getXAConnection(PostgresDBType).XAEnd(xid);
+            getXAConnection(MySQLDBType).XAEnd(xid);
+            if (getXAConnection(PostgresDBType).XAPrepare(xid) && getXAConnection(MySQLDBType).XAPrepare(xid)) {
+                getXAConnection(PostgresDBType).XACommit(xid);
+                getXAConnection(MySQLDBType).XACommit(xid);
+                committed = true;
+            } else {
+                getXAConnection(PostgresDBType).XARollback(xid);
+                getXAConnection(MySQLDBType).XARollback(xid);
+            }
         } catch (Exception e) {
             e.printStackTrace();
         }
-        // TODO: transaction manager does 2PC here to commit or abort the transaction.
+
+        if (committed == false) {
+            getXAConnection(PostgresDBType).XAEnd(xid);
+            getXAConnection(MySQLDBType).XAEnd(xid);
+            getXAConnection(PostgresDBType).XARollback(xid);
+            getXAConnection(MySQLDBType).XARollback(xid);
+        }
         return f;
     }
 
