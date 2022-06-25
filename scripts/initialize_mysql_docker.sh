@@ -11,7 +11,7 @@ docker pull mysql
 docker run -d --network host --rm --name="apiary-mysql" --env MYSQL_ROOT_PASSWORD=dbos mysql:latest
 
 # Wait a bit.
-sleep 10
+sleep 30
 
 # Create DBOS database.
-docker exec -i apiary-mysql mysql -hlocalhost -uroot -pdbos -t < init_mysql.sql
+mysql -h 172.17.0.1 -uroot -pdbos -P3306 -t < init_mysql.sql

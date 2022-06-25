@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.sql.SQLException;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
@@ -72,7 +73,7 @@ public class XAConnection implements ApiaryConnection {
                 committed = true;
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            //e.printStackTrace();
         }
 
         if (committed == false) {
@@ -84,6 +85,9 @@ public class XAConnection implements ApiaryConnection {
             // Rollback XA transaction in underlying databases
             getXAConnection(PostgresDBType).XARollback(xid);
             getXAConnection(MySQLDBType).XARollback(xid);
+        }
+        if (f == null) {
+            f = new FunctionOutput(0, new ArrayList<org.dbos.apiary.function.Task>());
         }
         return f;
     }

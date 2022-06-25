@@ -13,22 +13,25 @@ import java.sql.ResultSet;
 public class PostgresXAConnection implements XADBConnection {
     private static final Logger logger = LoggerFactory.getLogger(MySQLXAConnection.class);
 
-    private final PGXADataSource ds;
+    private final ThreadLocal<PGXADataSource> ds;
     private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
 
     public PostgresXAConnection(String hostname, Integer port, String databaseName, String databaseUsername, String databasePassword) throws SQLException {
-        this.ds = new PGXADataSource();
-        // Set dataSource Properties
-        this.ds.setServerName(hostname);
-        this.ds.setPortNumber(port);
-        this.ds.setDatabaseName(databaseName);
-        this.ds.setUser(databaseUsername);
-        this.ds.setPassword(databasePassword);
+        this.ds = ThreadLocal.withInitial(() -> {
+            PGXADataSource ds = new PGXADataSource();
+            // Set dataSource Properties
+            ds.setServerName(hostname);
+            ds.setPortNumber(port);
+            ds.setDatabaseName(databaseName);
+            ds.setUser(databaseUsername);
+            ds.setPassword(databasePassword);
+            return ds;
+        });
 
         this.xaconnection = ThreadLocal.withInitial(() -> {
             try {
-                javax.sql.XAConnection conn = ds.getXAConnection();
+                javax.sql.XAConnection conn = ds.get().getXAConnection();
                 // conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
                 return conn;
             } catch (SQLException e) {
@@ -49,7 +52,7 @@ public class PostgresXAConnection implements XADBConnection {
         });
 
         try {
-            Connection testConn = ds.getConnection();
+            Connection testConn = ds.get().getConnection();
             testConn.close();
         } catch (SQLException e) {
             logger.info("Failed to connect to Postgres");
@@ -58,7 +61,7 @@ public class PostgresXAConnection implements XADBConnection {
     }
 
     public void dropTable(String tableName) throws SQLException {
-        Connection conn = ds.getConnection();
+        Connection conn = ds.get().getConnection();
         Statement truncateTable = conn.createStatement();
         truncateTable.execute(String.format("DROP TABLE IF EXISTS %s;", tableName));
         truncateTable.close();
@@ -69,7 +72,7 @@ public class PostgresXAConnection implements XADBConnection {
         Connection c = null;
         Statement s = null;
         try {
-            c = ds.getConnection();
+            c = ds.get().getConnection();
             s = c.createStatement();
             String apiaryTable = String.format(
                 "CREATE TABLE IF NOT EXISTS %s (%s);", tableName,specStr);
@@ -91,7 +94,7 @@ public class PostgresXAConnection implements XADBConnection {
         Connection c = null;
         Statement s = null;
         try {
-            c = ds.getConnection();
+            c = ds.get().getConnection();
             s = c.createStatement();
             s.execute(indexString);
         } catch(Exception e) {

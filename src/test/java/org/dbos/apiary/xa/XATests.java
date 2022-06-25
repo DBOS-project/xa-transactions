@@ -8,6 +8,8 @@ import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.utilities.ApiaryConfig;
 import org.dbos.apiary.worker.ApiaryNaiveScheduler;
 import org.dbos.apiary.worker.ApiaryWorker;
+import org.dbos.apiary.xa.procedures.BankAudit;
+import org.dbos.apiary.xa.procedures.BankTransfer;
 import org.dbos.apiary.xa.procedures.GetApiaryClientID;
 import org.dbos.apiary.xa.procedures.MySQLXAQueryPerson;
 import org.dbos.apiary.xa.procedures.PostgresXAQueryPerson;
@@ -178,8 +180,7 @@ public class XATests {
         assertEquals(456, res);
     }
     
-    //@BeforeEach
-    public void resetTables() {
+    public void resetPersonTables() {
         try {
             PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
             postgresConn.dropTable("FuncInvocations");
@@ -202,10 +203,10 @@ public class XATests {
 
 
     @Test
-    public void testMysqlConcurrentInsert() throws InterruptedException {
-        logger.info("testMysqlConcurrentInsert");
+    public void testXAConcurrentInsert() throws InterruptedException {
+        logger.info("testXAConcurrentInsert");
 
-        resetTables();
+        resetPersonTables();
         XAConnection conn;
         try {
             MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
@@ -272,4 +273,127 @@ public class XATests {
         assertTrue(success.get());
     }
 
+    public void resetBankAccountTables() {
+        try {
+            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            postgresConn.dropTable("FuncInvocations");
+            postgresConn.dropTable("BankAccount");
+            postgresConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
+
+            // Fill the bank accounts with 100 accounts each with 10 dollars
+            for(int i = 0; i < 100; ++i) {
+                postgresConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, 10);
+            }
+        } catch (Exception e) {
+            logger.info("Failed to connect to Postgres.");
+        }
+
+        try {
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
+            mysqlConn.dropTable("FuncInvocations");
+            mysqlConn.dropTable("BankAccount");
+            mysqlConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
+
+            // Fill the bank accounts with 100 accounts each with 10 dollars
+            for(int i = 0; i < 100; ++i) {
+                mysqlConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, 10);
+            }
+        } catch (Exception e) {
+            logger.info("Failed to connect to MySQL.");
+        }
+
+        apiaryWorker = null;
+    }
+
+
+    @Test
+    public void testXAConcurrentMoneyTransfers() throws InterruptedException {
+        logger.info("testXAConcurrentMoneyTransfers");
+
+        resetBankAccountTables();
+        XAConnection conn;
+        try {
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
+            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            conn = new XAConnection(postgresConn, mysqlConn);
+        } catch (Exception e) {
+            logger.info("No MySQL/Postgres instance! {}", e.getMessage());
+            return;
+        }
+
+        int numThreads = 10;
+        apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numThreads);
+        apiaryWorker.registerConnection(XAConfig.XA, conn);
+        apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
+        apiaryWorker.registerFunction("BankAudit", XAConfig.XA, BankAudit::new);
+        apiaryWorker.registerFunction("BankTransfer", XAConfig.XA, BankTransfer::new);
+
+        apiaryWorker.startServing();
+
+
+        long start = System.currentTimeMillis();
+        long testDurationMs = 5000L;
+        AtomicBoolean success = new AtomicBoolean(true);
+        int correctTotalBalance = 100*10*2;
+
+        try{
+            ApiaryWorkerClient client = new ApiaryWorkerClient("localhost");
+            int sumBalance = client.executeFunction("BankAudit", XAConnection.MySQLDBType, XAConnection.PostgresDBType).getInt();
+                        
+            if (sumBalance != correctTotalBalance) {
+                logger.info("{} != {}", correctTotalBalance, sumBalance);
+                success.set(false);
+            }
+            assert(correctTotalBalance == sumBalance);
+        } catch (Exception e) {
+            e.printStackTrace();
+            success.set(false);
+        }
+        
+        Runnable r = () -> {
+            try {
+                
+                ApiaryWorkerClient client = new ApiaryWorkerClient("localhost");
+                String[] DBTypes = {XAConnection.MySQLDBType, XAConnection.PostgresDBType};
+                while (System.currentTimeMillis() < start + testDurationMs) {
+                    int fromAccountId = ThreadLocalRandom.current().nextInt(100);
+                    int toAccountId = ThreadLocalRandom.current().nextInt(100);
+                    int fromDBTypeIdx = ThreadLocalRandom.current().nextInt(2);
+                    String fromDBType = DBTypes[fromDBTypeIdx];
+                    String toDBType = DBTypes[1 - fromDBTypeIdx];
+
+                    client.executeFunction("BankTransfer", fromDBType, toDBType, fromAccountId, toAccountId).getInt();
+
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+                success.set(false);
+            }
+        };
+
+        List<Thread> threads = new ArrayList<>();
+        for (int threadNum = 0; threadNum < numThreads; threadNum++) {
+            Thread t = new Thread(r);
+            threads.add(t);
+            t.start();
+        }
+        for (Thread t: threads) {
+            t.join();
+        }
+
+        try{
+            ApiaryWorkerClient client = new ApiaryWorkerClient("localhost");
+            int sumBalance = client.executeFunction("BankAudit", XAConnection.MySQLDBType, XAConnection.PostgresDBType).getInt();
+                        
+            if (sumBalance != correctTotalBalance) {
+                logger.info("{} != {}", correctTotalBalance, sumBalance);
+                success.set(false);
+            }
+            assert(correctTotalBalance == sumBalance);
+        } catch (Exception e) {
+            e.printStackTrace();
+            success.set(false);
+        }
+        assertTrue(success.get());
+    }
 }
