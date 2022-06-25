@@ -49,7 +49,7 @@ public class XAConnection implements ApiaryConnection {
         ApiaryXID xid  = ApiaryXID.fromLong(xidCounter.getAndIncrement());
         FunctionOutput f = null;
         boolean committed = false;
-        
+        boolean ended = false;
         // TODO: transaction manager does 2PC here to commit or abort the transaction.
 
         try {
@@ -59,21 +59,21 @@ public class XAConnection implements ApiaryConnection {
             f = workerContext.getFunction(functionName).apiaryRunFunction(ctxt, inputs);
             getXAConnection(PostgresDBType).XAEnd(xid);
             getXAConnection(MySQLDBType).XAEnd(xid);
+            ended =true;
             if (getXAConnection(PostgresDBType).XAPrepare(xid) && getXAConnection(MySQLDBType).XAPrepare(xid)) {
                 getXAConnection(PostgresDBType).XACommit(xid);
                 getXAConnection(MySQLDBType).XACommit(xid);
                 committed = true;
-            } else {
-                getXAConnection(PostgresDBType).XARollback(xid);
-                getXAConnection(MySQLDBType).XARollback(xid);
             }
         } catch (Exception e) {
             e.printStackTrace();
         }
 
         if (committed == false) {
-            getXAConnection(PostgresDBType).XAEnd(xid);
-            getXAConnection(MySQLDBType).XAEnd(xid);
+            if (ended == false) {
+                getXAConnection(PostgresDBType).XAEnd(xid);
+                getXAConnection(MySQLDBType).XAEnd(xid);
+            }
             getXAConnection(PostgresDBType).XARollback(xid);
             getXAConnection(MySQLDBType).XARollback(xid);
         }
