@@ -87,6 +87,8 @@ public class XAConnection implements ApiaryConnection {
             getXAConnection(MySQLDBType).XARollback(xid);
         }
         if (f == null) {
+            // Hack. Need to return a non-null function output in case of Exceptions (e.g., concurrency control conflicts from PG) thrown from underlying databases.
+            // Otherwise it might trigger the assertion failure at ApiarayWorker.java:220
             f = new FunctionOutput(0, new ArrayList<org.dbos.apiary.function.Task>());
         }
         return f;
