@@ -12,8 +12,6 @@ import java.sql.ResultSet;
 public class XASimpleTest extends XAFunction {
     private static final Logger logger = LoggerFactory.getLogger(XASimpleTest.class);
 
-    // TODO: add some SQL queries here.
-
     public int runFunction(XAContext context, String input) throws Exception {
         logger.info("Simple Test, input {}", input);
         // TODO: implement meaningful logic here.

@@ -12,4 +12,4 @@ docker run -d --network host --rm --name="apiary-postgres" --env POSTGRES_PASSWO
 # Wait a bit.
 sleep 10
 
-PGPASSWORD=dbos psql -h 172.17.0.1 -U postgres -f init_postgres.sql
+PGPASSWORD=dbos psql -h $PG_HOST -U postgres -f init_postgres.sql

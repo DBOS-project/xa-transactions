@@ -14,4 +14,4 @@ docker run -d --network host --rm --name="apiary-mysql" --env MYSQL_ROOT_PASSWOR
 sleep 30
 
 # Create DBOS database.
-mysql -h 172.17.0.1 -uroot -pdbos -P3306 -t < init_mysql.sql
+mysql -h $MYSQL_HOST -uroot -pdbos -P3306 -t < init_mysql.sql

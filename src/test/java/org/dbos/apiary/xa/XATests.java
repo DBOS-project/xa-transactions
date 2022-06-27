@@ -250,10 +250,11 @@ public class XATests {
                     }
 
                     res = client.executeFunction("XAQueryPersonBoth", "matei" + localCount).getInt();
-                    assert(res == 2);
                     if (res != 2) {
+                        logger.info("{} != {}", 2, res);
                         success.set(false);
                     }
+                    assert(res == 2);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
