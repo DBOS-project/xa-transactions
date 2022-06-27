@@ -26,7 +26,6 @@ import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
-import org.postgresql.xa.PGXAConnection;
 import org.postgresql.xa.PGXAException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
