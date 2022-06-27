@@ -19,8 +19,8 @@ public class PostgresXAConnection extends BaseXAConnection {
     public PostgresXAConnection(String hostname, Integer port, String databaseName, String databaseUsername, String databasePassword) throws SQLException {
         this.ds = new PGXADataSource();
         // Set dataSource Properties
-        ds.setServerName(hostname);
-        ds.setPortNumber(port);
+        ds.setServerNames(new String[] {hostname});
+        ds.setPortNumbers(new int[] {port});
         ds.setDatabaseName(databaseName);
         ds.setUser(databaseUsername);
         ds.setPassword(databasePassword);
