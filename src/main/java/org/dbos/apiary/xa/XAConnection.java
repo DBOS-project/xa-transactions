@@ -106,11 +106,10 @@ public class XAConnection implements ApiaryConnection {
                 e.printStackTrace();
                 break;
             }
-
-            if (committed == false) {
+            // try again
+            if (!committed) {
                 rollback(xid, ended);
             }
-            // try again
         }
 
         return f;
