@@ -53,6 +53,9 @@ public class BenchmarkingExecutable {
         if (benchmark.equalsIgnoreCase("xabank")) {
             logger.info("Running XA banking benchmark.");
             int percentageTransfer = 10;
+            if (cmd.hasOption("p1")) {
+                percentageTransfer = Integer.parseInt(cmd.getOptionValue("p1"));
+            }
             logger.info("XABank benchmark transfer percentage: {}%", percentageTransfer);
             XABankBenchmark.benchmark(mainHostAddr, postgresAddr, mysqlAddr, interval, duration, percentageTransfer);
         }
