@@ -2,7 +2,7 @@ package org.dbos.apiary.xa;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
-import io.netty.util.internal.ThreadLocalRandom;
+import java.util.concurrent.ThreadLocalRandom;
 
 import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.utilities.ApiaryConfig;
@@ -17,8 +17,6 @@ import org.dbos.apiary.xa.procedures.XAQueryPersonBoth;
 import org.dbos.apiary.xa.procedures.XASimpleTest;
 import org.dbos.apiary.xa.procedures.XAUpsertPerson;
 import org.junit.jupiter.api.AfterEach;
-import org.junit.jupiter.api.BeforeEach;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -291,7 +289,6 @@ public class XATests {
 
         try {
             MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
-            mysqlConn.dropTable("FuncInvocations");
             mysqlConn.dropTable("BankAccount");
             mysqlConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
 
