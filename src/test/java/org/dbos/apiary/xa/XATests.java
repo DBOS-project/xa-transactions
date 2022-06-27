@@ -50,7 +50,7 @@ public class XATests {
     public void testSimpleMySQL() throws InvalidProtocolBufferException {
         logger.info("testSimpleMySQL");
         try {
-            MySQLXAConnection conn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
+            MySQLXAConnection conn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
             conn.dropTable("test");
             conn.createTable("test", "a int, b varchar(100)");
             for (int i = 0; i < 10; ++i) {
@@ -68,7 +68,7 @@ public class XATests {
     public void testSimpleMySQLXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleMySQLXA");
         try {
-            MySQLXAConnection conn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
+            MySQLXAConnection conn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
             conn.dropTable("test");
             conn.createTable("test", "a int, b varchar(100)");
             ApiaryXID xid = ApiaryXID.fromLong(100);
@@ -99,7 +99,7 @@ public class XATests {
     public void testSimplePostgres() throws InvalidProtocolBufferException {
         logger.info("testSimplePostgres");
         try {
-            PostgresXAConnection conn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");
+            PostgresXAConnection conn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");
             conn.dropTable("test");
             conn.createTable("test", "a int, b varchar(100)");
             for (int i = 0; i < 10; ++i) {
@@ -117,7 +117,7 @@ public class XATests {
     public void testSimplePostgresXA() throws InvalidProtocolBufferException {
         logger.info("testSimplePostgresXA");
         try {
-            PostgresXAConnection conn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");
+            PostgresXAConnection conn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");
             conn.dropTable("test");
             conn.createTable("test", "a int, b varchar(100)");
             ApiaryXID xid = ApiaryXID.fromLong(100);
@@ -152,8 +152,8 @@ public class XATests {
 
         XAConnection conn;
         try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
-            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
+            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
             mysqlConn.dropTable("test");
             mysqlConn.createTable("test", "a int, b varchar(100)");
             postgresConn.dropTable("test");
@@ -182,7 +182,7 @@ public class XATests {
     
     public void resetPersonTables() {
         try {
-            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
             postgresConn.dropTable("FuncInvocations");
             postgresConn.dropTable("PersonTable");
             postgresConn.createTable("PersonTable", "Name varchar(1000) PRIMARY KEY NOT NULL, Number integer NOT NULL");
@@ -191,7 +191,7 @@ public class XATests {
         }
 
         try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
             mysqlConn.dropTable("PersonTable");
             mysqlConn.createTable("PersonTable", "Name varchar(1000) NOT NULL, Number integer NOT NULL");
         } catch (Exception e) {
@@ -209,8 +209,8 @@ public class XATests {
         resetPersonTables();
         XAConnection conn;
         try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
-            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
+            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
             conn = new XAConnection(postgresConn, mysqlConn);
         } catch (Exception e) {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
@@ -276,7 +276,7 @@ public class XATests {
 
     public void resetBankAccountTables() {
         try {
-            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
             postgresConn.dropTable("FuncInvocations");
             postgresConn.dropTable("BankAccount");
             postgresConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
@@ -290,7 +290,7 @@ public class XATests {
         }
 
         try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
             mysqlConn.dropTable("FuncInvocations");
             mysqlConn.dropTable("BankAccount");
             mysqlConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
@@ -314,8 +314,8 @@ public class XATests {
         resetBankAccountTables();
         XAConnection conn;
         try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("172.17.0.1", 3306, "dbos", "root", "dbos");
-            PostgresXAConnection postgresConn = new PostgresXAConnection("172.17.0.1", 5432, "dbos", "postgres", "dbos");    
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
+            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
             conn = new XAConnection(postgresConn, mysqlConn);
         } catch (Exception e) {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
