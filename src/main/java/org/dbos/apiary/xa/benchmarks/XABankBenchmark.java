@@ -24,7 +24,7 @@ import java.util.stream.Collectors;
 public class XABankBenchmark {
     private static final Logger logger = LoggerFactory.getLogger(XABankBenchmark.class);
     private static final int numWorkerThreads = 64;
-    private static final int threadPoolSize = 128;
+    private static final int threadPoolSize = 16;
     private static final int threadWarmupMs = 5000;  // First 5 seconds of requests would be warm-up and not recorded.
 
     private static final int numAccounts = 1000;

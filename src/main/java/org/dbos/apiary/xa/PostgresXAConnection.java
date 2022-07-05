@@ -28,7 +28,6 @@ public class PostgresXAConnection extends BaseXAConnection {
         this.xaconnection = ThreadLocal.withInitial(() -> {
             try {
                 javax.sql.XAConnection conn = ds.getXAConnection();
-                // conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
                 return conn;
             } catch (SQLException e) {
                 e.printStackTrace();

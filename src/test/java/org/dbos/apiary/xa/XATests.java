@@ -2,6 +2,9 @@ package org.dbos.apiary.xa;
 
 import com.google.protobuf.InvalidProtocolBufferException;
 
+import bitronix.tm.BitronixTransactionManager;
+import bitronix.tm.TransactionManagerServices;
+
 import java.util.concurrent.ThreadLocalRandom;
 
 import org.dbos.apiary.client.ApiaryWorkerClient;
@@ -16,6 +19,7 @@ import org.dbos.apiary.xa.procedures.PostgresXAQueryPerson;
 import org.dbos.apiary.xa.procedures.XAQueryPersonBoth;
 import org.dbos.apiary.xa.procedures.XASimpleTest;
 import org.dbos.apiary.xa.procedures.XAUpsertPerson;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
@@ -23,9 +27,10 @@ import org.slf4j.LoggerFactory;
 import java.sql.ResultSet;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
-
+import org.dbos.apiary.xa.BitronixXADBConnection;
 import org.postgresql.xa.PGXAException;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -36,10 +41,37 @@ public class XATests {
 
     private ApiaryWorker apiaryWorker;
 
+    private BitronixXADBConnection BitronixDBConn;
     @AfterEach
     public void cleanupWorker() {
         if (apiaryWorker != null) {
             apiaryWorker.shutdown();
+        }
+        if (BitronixDBConn != null) {
+            BitronixDBConn.close();
+            BitronixDBConn = null;
+        }
+    }
+
+    @AfterAll
+    public static void finalCleanup() {
+		TransactionManagerServices.getTransactionManager().shutdown();
+    }
+    
+    @Test
+    public void testSimpleBitronixMySQLXA() throws InvalidProtocolBufferException {
+        logger.info("testSimpleBitronixMySQLXA");
+        try {
+            BitronixDBConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", "localhost", 3306, "dbos", "root", "dbos");
+            BitronixDBConn.dropTable("test");
+            BitronixDBConn.createTable("test", "a int, b varchar(100)");
+            for (int i = 0; i < 10; ++i) {
+                BitronixDBConn.executeUpdate("INSERT INTO test(a, b) VALUES (?, ?);", i, "test" + i);
+            }
+            ResultSet res = BitronixDBConn.executeQuery("SELECT * from test");
+            logger.info(res.toString());
+        } catch (Exception e) {
+            logger.info(e.getMessage());
         }
     }
 
@@ -144,6 +176,24 @@ public class XATests {
     }
 
     @Test
+    public void testSimpleBitronixPostgresXA() throws InvalidProtocolBufferException {
+        logger.info("testSimpleBitronixPostgresXA");
+        try {
+            BitronixDBConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", "localhost", 5432, "dbos", "postgres", "dbos");
+            BitronixDBConn.dropTable("test");
+            BitronixDBConn.createTable("test", "a int, b varchar(100)");
+            for (int i = 0; i < 10; ++i) {
+                BitronixDBConn.executeUpdate("INSERT INTO test(a, b) VALUES (?, ?);", i, "test" + i);
+            }
+            ResultSet res = BitronixDBConn.executeQuery("SELECT * from test");
+            logger.info(res.toString());
+        } catch (Exception e) {
+            logger.info(e.getMessage());
+        }
+    }
+
+
+    @Test
     public void testSimpleXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleXA");
 
@@ -157,6 +207,7 @@ public class XATests {
             postgresConn.createTable("test", "a int, b varchar(100)");
             conn = new XAConnection(postgresConn, mysqlConn);
         } catch (Exception e) {
+            e.printStackTrace();
             logger.info("No XA instance!");
             return;
         }
@@ -177,6 +228,55 @@ public class XATests {
         assertEquals(456, res);
     }
     
+
+    @Test
+    public void testSimpleBitronixXA() throws InvalidProtocolBufferException {
+        logger.info("testSimpleBitronixXA");
+
+        BitronixXAConnection conn;
+        BitronixXADBConnection mysqlConn;
+        BitronixXADBConnection postgresConn;
+        try {
+            mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", "localhost", 3306, "dbos", "root", "dbos");
+            postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", "localhost", 5432, "dbos", "postgres", "dbos");
+            mysqlConn.dropTable("test");
+            mysqlConn.createTable("test", "a int, b varchar(100)");
+            postgresConn.dropTable("test");
+            postgresConn.createTable("test", "a int, b varchar(100)");
+            conn = new BitronixXAConnection(postgresConn, mysqlConn);
+        } catch (Exception e) {
+            e.printStackTrace();
+            logger.info("No XA instance!");
+            return;
+        }
+
+        apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), 4);
+        apiaryWorker.registerConnection(XAConfig.XA, conn);
+        apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
+        apiaryWorker.registerFunction("XASimpleTest", XAConfig.XA, XASimpleTest::new);
+        apiaryWorker.startServing();
+
+        ApiaryWorkerClient client = new ApiaryWorkerClient("localhost");
+
+        int res;
+        res = client.executeFunction("XASimpleTest", "123").getInt();
+        assertEquals(123, res);
+
+        res = client.executeFunction("XASimpleTest", "456").getInt();
+        assertEquals(456, res);
+
+        try {
+            return;
+        } finally {
+            if (mysqlConn != null) {
+                mysqlConn.close();
+            }
+            if (postgresConn != null) {
+                postgresConn.close();
+            }
+        }
+    }
+
     public void resetPersonTables() {
         try {
             PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
@@ -198,21 +298,57 @@ public class XATests {
         apiaryWorker = null;
     }
 
+    // @Test
+    // public void testXAConcurrentInsert() throws InterruptedException {
+    //     logger.info("testXAConcurrentInsert");
+    //     XAConnection conn;
+    //     try {
+    //         MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
+    //         PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
+    //         conn = new XAConnection(postgresConn, mysqlConn);
+    //     } catch (Exception e) {
+    //         logger.info("No MySQL/Postgres instance! {}", e.getMessage());
+    //         return;
+    //     }
+
+    //     testXAConcurrentInsertWork(conn);
+    // }
 
     @Test
-    public void testXAConcurrentInsert() throws InterruptedException {
-        logger.info("testXAConcurrentInsert");
-
-        resetPersonTables();
-        XAConnection conn;
+    public void testXAConcurrentInsertBitronix() throws InterruptedException {
+        logger.info("testXAConcurrentInsertBitronix");
+        BitronixXAConnection conn;
+        BitronixXADBConnection mysqlConn;
+        BitronixXADBConnection postgresConn;
         try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
-            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
-            conn = new XAConnection(postgresConn, mysqlConn);
+            mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", "localhost", 3306, "dbos", "root", "dbos");
+            postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", "localhost", 5432, "dbos", "postgres", "dbos");
+            mysqlConn.dropTable("test");
+            mysqlConn.createTable("test", "a int, b varchar(100)");
+            postgresConn.dropTable("test");
+            postgresConn.createTable("test", "a int, b varchar(100)");
+            conn = new BitronixXAConnection(postgresConn, mysqlConn);
         } catch (Exception e) {
-            logger.info("No MySQL/Postgres instance! {}", e.getMessage());
+            e.printStackTrace();
+            logger.info("No XA instance!");
             return;
         }
+        testXAConcurrentInsertWork(conn);
+
+        try {
+            return;
+        } finally {
+            if (mysqlConn != null) {
+                mysqlConn.close();
+            }
+            if (postgresConn != null) {
+                postgresConn.close();
+            }
+        }
+    }
+
+    public void testXAConcurrentInsertWork(XAConnection conn) throws InterruptedException {
+        resetPersonTables();
 
         int numThreads = 10;
         apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numThreads);
@@ -302,22 +438,8 @@ public class XATests {
         apiaryWorker = null;
     }
 
-
-    @Test
-    public void testXAConcurrentMoneyTransfers() throws InterruptedException {
-        logger.info("testXAConcurrentMoneyTransfers");
-
+    public void testXAConcurrentMoneyTransfers(XAConnection conn) throws InterruptedException {
         resetBankAccountTables();
-        XAConnection conn;
-        try {
-            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
-            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
-            conn = new XAConnection(postgresConn, mysqlConn);
-        } catch (Exception e) {
-            logger.info("No MySQL/Postgres instance! {}", e.getMessage());
-            return;
-        }
-
         int numThreads = 10;
         apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numThreads);
         apiaryWorker.registerConnection(XAConfig.XA, conn);
@@ -392,5 +514,51 @@ public class XATests {
             success.set(false);
         }
         assertTrue(success.get());
+    }
+
+    @Test
+    public void testBitronixXAConcurrentMoneyTransfers() throws InterruptedException {
+        logger.info("testBitronixXAConcurrentMoneyTransfers");
+
+        BitronixXAConnection conn;
+        BitronixXADBConnection mysqlConn;
+        BitronixXADBConnection postgresConn;
+        try {
+            mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", "localhost", 3306, "dbos", "root", "dbos");
+            postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", "localhost", 5432, "dbos", "postgres", "dbos");
+            conn = new BitronixXAConnection(postgresConn, mysqlConn);
+        } catch (Exception e) {
+            e.printStackTrace();
+            logger.info("No XA instance!");
+            return;
+        }
+        testXAConcurrentMoneyTransfers(conn);
+        try {
+            return;
+        } finally {
+            if (mysqlConn != null) {
+                mysqlConn.close();
+            }
+            if (postgresConn != null) {
+                postgresConn.close();
+            }
+        }
+    }
+
+    @Test
+    public void testXAConcurrentMoneyTransfers() throws InterruptedException {
+        logger.info("testXAConcurrentMoneyTransfers");
+
+        XAConnection conn;
+        try {
+            MySQLXAConnection mysqlConn = new MySQLXAConnection("localhost", 3306, "dbos", "root", "dbos");
+            PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
+            conn = new XAConnection(postgresConn, mysqlConn);
+        } catch (Exception e) {
+            logger.info("No MySQL/Postgres instance! {}", e.getMessage());
+            return;
+        }
+
+        testXAConcurrentMoneyTransfers(conn);
     }
 }

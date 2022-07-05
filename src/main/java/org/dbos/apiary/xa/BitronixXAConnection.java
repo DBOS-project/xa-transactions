@@ -9,24 +9,27 @@ import org.postgresql.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import bitronix.tm.BitronixTransactionManager;
+import bitronix.tm.TransactionManagerServices;
+
 import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
 
-public class XAConnection implements ApiaryConnection {
+public class BitronixXAConnection extends XAConnection {
 
     private AtomicLong xidCounter = new AtomicLong(1);
     private static final Logger logger = LoggerFactory.getLogger(XAConnection.class);
     public static String PostgresDBType = "Postgres";
     public static String MySQLDBType = "MySQL";
-    XADBConnection postgresConnection;
-    XADBConnection mysqlConnection;
+    BitronixXADBConnection postgresConnection;
+    BitronixXADBConnection mysqlConnection;
     
-    public XADBConnection getXAConnection(String DBType) {
+
+    public BitronixXADBConnection getXAConnection(String DBType) {
         if (DBType.equals(PostgresDBType)) {
             return postgresConnection;
         } else if (DBType.equals(MySQLDBType)) {
@@ -36,54 +39,32 @@ public class XAConnection implements ApiaryConnection {
         }
     }
 
-    public XAConnection(XADBConnection postgresConnection, XADBConnection mysqlConnection) throws SQLException {
+    public BitronixXAConnection(BitronixXADBConnection postgresConnection, BitronixXADBConnection mysqlConnection) throws SQLException {
+        super(postgresConnection,  mysqlConnection);
         assert(postgresConnection != null);
         assert(mysqlConnection != null);
         this.postgresConnection = postgresConnection;
         this.mysqlConnection = mysqlConnection;
     }
 
-    private void rollback(ApiaryXID xid, boolean ended) throws Exception{
-        if (ended == false) {
-            getXAConnection(PostgresDBType).XAEnd(xid);
-            getXAConnection(MySQLDBType).XAEnd(xid);
-        }
-        // TODO: persist abort decision ?
-        // Rollback XA transaction in underlying databases
-        getXAConnection(PostgresDBType).XARollback(xid);
-        getXAConnection(MySQLDBType).XARollback(xid);
-    }
-
     @Override
     public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, Object... inputs) throws Exception {
         FunctionOutput f = null;
+        BitronixTransactionManager btm = TransactionManagerServices.getTransactionManager();
+
         while(true) {
             XAContext ctxt = new XAContext(this, workerContext, service, execID, functionID);
-            ApiaryXID xid  = ApiaryXID.fromLong(xidCounter.getAndIncrement());
-            
-            boolean committed = false;
-            boolean ended = false;
             try {
-                // Start XA transaction in underlying databases
-                getXAConnection(PostgresDBType).XAStart(xid);
-                getXAConnection(MySQLDBType).XAStart(xid);
-                // The function would contain transactions across multiple databases.
+                btm.begin();
                 f = workerContext.getFunction(functionName).apiaryRunFunction(ctxt, inputs);
-                // End XA transaction in underlying databases
-                getXAConnection(PostgresDBType).XAEnd(xid);
-                getXAConnection(MySQLDBType).XAEnd(xid);
-                ended =true;
-
-                // Prepare-phase
-                if (getXAConnection(PostgresDBType).XAPrepare(xid) && getXAConnection(MySQLDBType).XAPrepare(xid)) {
-                    // TODO: persist commit decision ?
-                    // Commit-phase
-                    getXAConnection(PostgresDBType).XACommit(xid);
-                    getXAConnection(MySQLDBType).XACommit(xid);
-                    committed = true;
-                    break;
-                }
+                btm.commit();
+                return f;
             } catch (Exception e) {
+                try {
+                    btm.rollback();
+                } catch (Exception ex) {
+                    e.printStackTrace();
+                }
                 if (e instanceof InvocationTargetException) {
                     Throwable innerException = e;
                     while (innerException instanceof InvocationTargetException) {
@@ -93,12 +74,7 @@ public class XAConnection implements ApiaryConnection {
                     if (innerException instanceof PSQLException) {
                         PSQLException p = (PSQLException) innerException;
                         if (p.getSQLState().equals(PSQLState.SERIALIZATION_FAILURE.getState())) {
-                            try {
-                                rollback(xid, ended);
-                                continue;
-                            } catch (SQLException ex) {
-                                ex.printStackTrace();
-                            }
+                            continue;
                         } else {
                             logger.info("Unrecoverable XA error: {} {}", p.getMessage(), p.getSQLState());
                         }
@@ -107,10 +83,6 @@ public class XAConnection implements ApiaryConnection {
                 logger.info("Unrecoverable error in function execution: {}", e.getMessage());
                 e.printStackTrace();
                 break;
-            }
-            // try again
-            if (!committed) {
-                rollback(xid, ended);
             }
         }
 
@@ -142,8 +114,10 @@ public class XAConnection implements ApiaryConnection {
 
     @Override
     public Map<Integer, String> getPartitionHostMap() {
-        Map<Integer, String> myMap = new TreeMap<Integer, String>();
-        myMap.put(0, "localhost");
+        // Ignore this if not necessary.
+        Map<Integer, String> myMap = new HashMap<Integer, String>() {{
+            put(0, "localhost");
+        }};
         return myMap;
     }
 }

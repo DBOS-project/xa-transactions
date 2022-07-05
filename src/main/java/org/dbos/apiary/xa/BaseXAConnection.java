@@ -17,6 +17,10 @@ public abstract class BaseXAConnection implements XADBConnection {
     public abstract java.sql.Connection getNewConnection() throws SQLException;
     public abstract java.sql.Connection getConnection() throws SQLException;
     
+    public void close() {
+
+    }
+
     public void dropTable(String tableName) throws SQLException {
         Connection conn = getNewConnection();
         Statement truncateTable = conn.createStatement();
