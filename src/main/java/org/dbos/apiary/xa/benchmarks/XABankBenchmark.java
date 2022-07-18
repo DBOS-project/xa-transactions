@@ -47,14 +47,14 @@ public class XABankBenchmark {
         return conn;
     }
 
-    static XAConnection getBitronixXAConnection(String postgresAddr, String mysqlAddr) throws SQLException {
+    static XAConnection getBitronixPGMySQLXAConnection(String postgresAddr, String mysqlAddr) throws SQLException {
         BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
         BitronixXADBConnection postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
         XAConnection conn = new BitronixXAConnection(postgresConn, mysqlConn);
         return conn;
     }
 
-    static XAConnection getXJXAConnection(String postgresAddr, String mysqlAddr) throws SQLException {
+    static XAConnection getXJPGMySQLXAConnection(String postgresAddr, String mysqlAddr) throws SQLException {
         MySQLXAConnection mysqlConn = new MySQLXAConnection(mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
         PostgresXAConnection postgresConn = new PostgresXAConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
         XAConnection conn = new XAConnection(postgresConn, mysqlConn);
@@ -68,7 +68,7 @@ public class XABankBenchmark {
             //conn = getBitronixXAConnection(postgresAddr, mysqlAddr);
             conn = getBitronix2MySQLXAConnection(mysqlAddr);
         } else if (transactionManager.equals("xinjing")) {
-            conn = getXJXAConnection(postgresAddr, mysqlAddr);
+            conn = getXJPGMySQLXAConnection(postgresAddr, mysqlAddr);
         } else {
             throw new RuntimeException("Unknown transaction manager " + transactionManager);
         }
