@@ -9,10 +9,13 @@ import org.postgresql.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException;
+
 import bitronix.tm.BitronixTransactionManager;
 import bitronix.tm.TransactionManagerServices;
 
 import java.lang.reflect.InvocationTargetException;
+import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
@@ -21,36 +24,36 @@ import java.util.concurrent.atomic.AtomicLong;
 
 public class BitronixXAConnection extends XAConnection {
 
-    private AtomicLong xidCounter = new AtomicLong(1);
     private static final Logger logger = LoggerFactory.getLogger(XAConnection.class);
     public static String PostgresDBType = "Postgres";
     public static String MySQLDBType = "MySQL";
-    BitronixXADBConnection postgresConnection;
-    BitronixXADBConnection mysqlConnection;
-    
-
-    public BitronixXADBConnection getXAConnection(String DBType) {
+    BitronixXADBConnection pgConnection;
+    BitronixXADBConnection mqConnection;
+    BitronixTransactionManager btm = null;
+    @Override
+    public XADBConnection getXAConnection(String DBType) {
         if (DBType.equals(PostgresDBType)) {
-            return postgresConnection;
+            return this.pgConnection;
         } else if (DBType.equals(MySQLDBType)) {
-            return mysqlConnection;
+            return this.mqConnection;
         } else {
             return null;
         }
     }
-
+    
     public BitronixXAConnection(BitronixXADBConnection postgresConnection, BitronixXADBConnection mysqlConnection) throws SQLException {
-        super(postgresConnection,  mysqlConnection);
-        assert(postgresConnection != null);
-        assert(mysqlConnection != null);
-        this.postgresConnection = postgresConnection;
-        this.mysqlConnection = mysqlConnection;
+        super(null,  null);
+        btm = TransactionManagerServices.getTransactionManager();
+        this.pgConnection = postgresConnection;
+        this.mqConnection = mysqlConnection;
+        assert(this.pgConnection != null);
+        assert(this.mqConnection != null);
     }
 
     @Override
     public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, Object... inputs) throws Exception {
         FunctionOutput f = null;
-        BitronixTransactionManager btm = TransactionManagerServices.getTransactionManager();
+
 
         while(true) {
             XAContext ctxt = new XAContext(this, workerContext, service, execID, functionID);
@@ -61,9 +64,12 @@ public class BitronixXAConnection extends XAConnection {
                 return f;
             } catch (Exception e) {
                 try {
-                    btm.rollback();
+                    if (btm.getCurrentTransaction() != null) {
+                        btm.rollback();
+                    }
                 } catch (Exception ex) {
-                    e.printStackTrace();
+                    logger.info("rollback error");
+                    ex.printStackTrace();
                 }
                 if (e instanceof InvocationTargetException) {
                     Throwable innerException = e;
@@ -76,9 +82,18 @@ public class BitronixXAConnection extends XAConnection {
                         if (p.getSQLState().equals(PSQLState.SERIALIZATION_FAILURE.getState())) {
                             continue;
                         } else {
-                            logger.info("Unrecoverable XA error: {} {}", p.getMessage(), p.getSQLState());
+                            logger.info("Unrecoverable XA error from PG: {} {}", p.getMessage(), p.getSQLState());
+                        }
+                    } else if (innerException instanceof MySQLTransactionRollbackException) {
+                        MySQLTransactionRollbackException m = (MySQLTransactionRollbackException) innerException;
+                        if (m.getErrorCode() == 1213 || m.getErrorCode() == 1205) {
+                            continue; // Deadlock or lock timed out
+                        } else {
+                            logger.info("Unrecoverable XA error from MySQL: {} {} {}", m.getMessage(), m.getSQLState(), m.getErrorCode());
                         }
                     }
+                } else if (e instanceof bitronix.tm.internal.BitronixRollbackException) {
+                    continue;
                 }
                 logger.info("Unrecoverable error in function execution: {}", e.getMessage());
                 e.printStackTrace();

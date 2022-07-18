@@ -3,6 +3,7 @@ package org.dbos.apiary.xa;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import bitronix.tm.resource.common.TransactionContextHelper;
 import bitronix.tm.resource.jdbc.PoolingDataSource;
 
 import java.sql.SQLException;
@@ -18,7 +19,8 @@ public class BitronixXADBConnection extends BaseXAConnection  {
     private PoolingDataSource ds;
     //private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
-
+    private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
+    //private static final int kIsolationLevel = Connection.TRANSACTION_REPEATABLE_READ;
     public void close() {
         ds.close();
     }
@@ -27,7 +29,7 @@ public class BitronixXADBConnection extends BaseXAConnection  {
         ds = new PoolingDataSource();
 		ds.setClassName(XADataSourceClassName);
 		ds.setUniqueName(XAUniqueResourceName);
-		ds.setMaxPoolSize(16);
+		ds.setMaxPoolSize(128);
 		ds.getDriverProperties().setProperty("databaseName", databaseName);
         ds.getDriverProperties().setProperty("serverName", hostname);
         ds.getDriverProperties().setProperty("portNumber", String.valueOf(port));
@@ -69,7 +71,8 @@ public class BitronixXADBConnection extends BaseXAConnection  {
         this.connection = ThreadLocal.withInitial(() -> {
             try {
                 Connection conn = this.ds.getConnection();
-                conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+                conn.setAutoCommit(false);
+                conn.setTransactionIsolation(kIsolationLevel);
                 return conn;
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -93,7 +96,10 @@ public class BitronixXADBConnection extends BaseXAConnection  {
 
     @Override
     public Connection getNewConnection() throws SQLException {
-        return ds.getConnection();
+        Connection c = ds.getConnection();
+        c.setTransactionIsolation(kIsolationLevel);
+        c.setAutoCommit(false);
+        return c;
     }
 
     @Override

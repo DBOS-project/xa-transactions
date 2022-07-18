@@ -37,8 +37,6 @@ public class XAConnection implements ApiaryConnection {
     }
 
     public XAConnection(XADBConnection postgresConnection, XADBConnection mysqlConnection) throws SQLException {
-        assert(postgresConnection != null);
-        assert(mysqlConnection != null);
         this.postgresConnection = postgresConnection;
         this.mysqlConnection = mysqlConnection;
     }
@@ -84,6 +82,7 @@ public class XAConnection implements ApiaryConnection {
                     break;
                 }
             } catch (Exception e) {
+                // try again
                 if (e instanceof InvocationTargetException) {
                     Throwable innerException = e;
                     while (innerException instanceof InvocationTargetException) {
@@ -108,7 +107,6 @@ public class XAConnection implements ApiaryConnection {
                 e.printStackTrace();
                 break;
             }
-            // try again
             if (!committed) {
                 rollback(xid, ended);
             }

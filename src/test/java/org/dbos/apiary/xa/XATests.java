@@ -21,6 +21,7 @@ import org.dbos.apiary.xa.procedures.XASimpleTest;
 import org.dbos.apiary.xa.procedures.XAUpsertPerson;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -59,6 +60,7 @@ public class XATests {
     }
     
     @Test
+    @Disabled
     public void testSimpleBitronixMySQLXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleBitronixMySQLXA");
         try {
@@ -76,6 +78,7 @@ public class XATests {
     }
 
     @Test
+    @Disabled
     public void testSimpleMySQL() throws InvalidProtocolBufferException {
         logger.info("testSimpleMySQL");
         try {
@@ -94,6 +97,7 @@ public class XATests {
 
 
     @Test
+    @Disabled
     public void testSimpleMySQLXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleMySQLXA");
         try {
@@ -125,6 +129,7 @@ public class XATests {
 
 
     @Test
+    @Disabled
     public void testSimplePostgres() throws InvalidProtocolBufferException {
         logger.info("testSimplePostgres");
         try {
@@ -143,6 +148,7 @@ public class XATests {
 
 
     @Test
+    @Disabled
     public void testSimplePostgresXA() throws InvalidProtocolBufferException {
         logger.info("testSimplePostgresXA");
         try {
@@ -176,6 +182,7 @@ public class XATests {
     }
 
     @Test
+    @Disabled
     public void testSimpleBitronixPostgresXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleBitronixPostgresXA");
         try {
@@ -194,6 +201,7 @@ public class XATests {
 
 
     @Test
+    @Disabled
     public void testSimpleXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleXA");
 
@@ -230,6 +238,7 @@ public class XATests {
     
 
     @Test
+    @Disabled
     public void testSimpleBitronixXA() throws InvalidProtocolBufferException {
         logger.info("testSimpleBitronixXA");
 
@@ -315,6 +324,7 @@ public class XATests {
     // }
 
     @Test
+    @Disabled
     public void testXAConcurrentInsertBitronix() throws InterruptedException {
         logger.info("testXAConcurrentInsertBitronix");
         BitronixXAConnection conn;
@@ -406,7 +416,8 @@ public class XATests {
         }
         assertTrue(success.get());
     }
-
+    static int NBankAcounts = 1000;
+    static int NBanks = 2;
     public void resetBankAccountTables() {
         try {
             PostgresXAConnection postgresConn = new PostgresXAConnection("localhost", 5432, "dbos", "postgres", "dbos");    
@@ -414,8 +425,8 @@ public class XATests {
             postgresConn.dropTable("BankAccount");
             postgresConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
 
-            // Fill the bank accounts with 100 accounts each with 10 dollars
-            for(int i = 0; i < 100; ++i) {
+            // Fill the bank accounts with NBankAcounts accounts each with 10 dollars
+            for(int i = 0; i < NBankAcounts; ++i) {
                 postgresConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, 10);
             }
         } catch (Exception e) {
@@ -427,8 +438,8 @@ public class XATests {
             mysqlConn.dropTable("BankAccount");
             mysqlConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
 
-            // Fill the bank accounts with 100 accounts each with 10 dollars
-            for(int i = 0; i < 100; ++i) {
+            // Fill the bank accounts with NBankAcounts accounts each with 10 dollars
+            for(int i = 0; i < NBankAcounts; ++i) {
                 mysqlConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, 10);
             }
         } catch (Exception e) {
@@ -440,7 +451,7 @@ public class XATests {
 
     public void testXAConcurrentMoneyTransfers(XAConnection conn) throws InterruptedException {
         resetBankAccountTables();
-        int numThreads = 10;
+        int numThreads = 4;
         apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numThreads);
         apiaryWorker.registerConnection(XAConfig.XA, conn);
         apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
@@ -451,9 +462,9 @@ public class XATests {
 
 
         long start = System.currentTimeMillis();
-        long testDurationMs = 5000L;
+        long testDurationMs = 10000L;
         AtomicBoolean success = new AtomicBoolean(true);
-        int correctTotalBalance = 100*10*2;
+        int correctTotalBalance = NBankAcounts*10*NBanks;
 
         try{
             ApiaryWorkerClient client = new ApiaryWorkerClient("localhost");
@@ -475,14 +486,21 @@ public class XATests {
                 ApiaryWorkerClient client = new ApiaryWorkerClient("localhost");
                 String[] DBTypes = {XAConnection.MySQLDBType, XAConnection.PostgresDBType};
                 while (System.currentTimeMillis() < start + testDurationMs) {
-                    int fromAccountId = ThreadLocalRandom.current().nextInt(100);
-                    int toAccountId = ThreadLocalRandom.current().nextInt(100);
+                    int fromAccountId = ThreadLocalRandom.current().nextInt(NBankAcounts);
+                    int toAccountId = ThreadLocalRandom.current().nextInt(NBankAcounts);
                     int fromDBTypeIdx = ThreadLocalRandom.current().nextInt(2);
                     String fromDBType = DBTypes[fromDBTypeIdx];
                     String toDBType = DBTypes[1 - fromDBTypeIdx];
 
                     client.executeFunction("BankTransfer", fromDBType, toDBType, fromAccountId, toAccountId).getInt();
 
+                    // int sumBalance = client.executeFunction("BankAudit", XAConnection.MySQLDBType, XAConnection.PostgresDBType).getInt();
+                        
+                    // if (sumBalance != correctTotalBalance) {
+                    //     logger.info("{} != {}", correctTotalBalance, sumBalance);
+                    //     success.set(false);
+                    // }
+                    //assert(correctTotalBalance == sumBalance);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -525,7 +543,17 @@ public class XATests {
         BitronixXADBConnection postgresConn;
         try {
             mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", "localhost", 3306, "dbos", "root", "dbos");
+            mysqlConn.executeUpdate("SET SESSION TRANSACTION ISOLATION LEVEL SERIALIZABLE");
             postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", "localhost", 5432, "dbos", "postgres", "dbos");
+            ResultSet rs = mysqlConn.executeQuery("SELECT @@global.transaction_ISOLATION;");
+            if (rs.next()) {
+                logger.info("MySQL connection set isolation level {}", rs.getString(1));
+            }
+
+            rs = mysqlConn.executeQuery("SHOW VARIABLES WHERE Variable_name='autocommit';");
+            if (rs.next()) {
+                logger.info("MySQL connection auto commit {}", rs.getString(2));
+            }
             conn = new BitronixXAConnection(postgresConn, mysqlConn);
         } catch (Exception e) {
             e.printStackTrace();
@@ -546,6 +574,7 @@ public class XATests {
     }
 
     @Test
+    @Disabled
     public void testXAConcurrentMoneyTransfers() throws InterruptedException {
         logger.info("testXAConcurrentMoneyTransfers");
 

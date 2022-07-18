@@ -15,7 +15,7 @@ public class PostgresXAConnection extends BaseXAConnection {
     private final PGXADataSource ds;
     private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
-
+    private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
     public PostgresXAConnection(String hostname, Integer port, String databaseName, String databaseUsername, String databasePassword) throws SQLException {
         this.ds = new PGXADataSource();
         // Set dataSource Properties
@@ -38,7 +38,7 @@ public class PostgresXAConnection extends BaseXAConnection {
         this.connection = ThreadLocal.withInitial(() -> {
             try {
                 Connection conn = this.xaconnection.get().getConnection();
-                conn.setTransactionIsolation(Connection.TRANSACTION_REPEATABLE_READ);
+                conn.setTransactionIsolation(kIsolationLevel);
                 return conn;
             } catch (SQLException e) {
                 e.printStackTrace();
@@ -62,7 +62,9 @@ public class PostgresXAConnection extends BaseXAConnection {
 
     @Override
     public Connection getNewConnection() throws SQLException {
-        return this.ds.getConnection();
+        Connection c = this.ds.getConnection();
+        c.setTransactionIsolation(kIsolationLevel);
+        return c;
     }
 
     @Override

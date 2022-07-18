@@ -139,7 +139,8 @@ public abstract class BaseXAConnection implements XADBConnection {
      */
     public void executeUpdate(String procedure, Object... input) throws SQLException {
         // First, prepare statement. Then, execute.
-        PreparedStatement pstmt = getConnection().prepareStatement(procedure);
+        Connection c = getConnection();
+        PreparedStatement pstmt = c.prepareStatement(procedure);
         prepareStatement(pstmt, input);
         pstmt.executeUpdate();
     }
@@ -150,7 +151,8 @@ public abstract class BaseXAConnection implements XADBConnection {
      * @param input     input parameters for the SQL statement.
      */
     public ResultSet executeQuery(String procedure, Object... input) throws SQLException {
-        PreparedStatement pstmt = getConnection().prepareStatement(procedure, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
+        Connection c = getConnection();
+        PreparedStatement pstmt = c.prepareStatement(procedure, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
         prepareStatement(pstmt, input);
         ResultSet rs = pstmt.executeQuery();
         return rs;
