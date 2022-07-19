@@ -14,7 +14,7 @@ import javax.transaction.xa.XAResource;
 import java.sql.Connection;
 
 public class BitronixXADBConnection extends BaseXAConnection  {
-    private static final Logger logger = LoggerFactory.getLogger(MySQLXAConnection.class);
+    private static final Logger logger = LoggerFactory.getLogger(BitronixXADBConnection.class);
 
     private PoolingDataSource ds;
     //private final ThreadLocal<javax.sql.XAConnection> xaconnection;
