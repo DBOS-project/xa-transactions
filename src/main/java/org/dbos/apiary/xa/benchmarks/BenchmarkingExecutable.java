@@ -19,6 +19,7 @@ public class BenchmarkingExecutable {
         options.addOption("mysqlAddr", true, "Address of the MySQL server.");
         options.addOption("postgresAddr", true, "Address of the Postgres server.");
         options.addOption("p1", true, "Percentage 1");
+        options.addOption("tm", true, "Which transaction manager to use? (bitronix | xinjing)");
 
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
@@ -48,16 +49,22 @@ public class BenchmarkingExecutable {
             mysqlAddr = cmd.getOptionValue("mysqlAddr");
         }
 
+        String transactionManager = "bitronix";
+        if (cmd.hasOption("tm")) {
+            transactionManager = cmd.getOptionValue("tm");
+        }
+
         String benchmark = cmd.getOptionValue("b");
 
         if (benchmark.equalsIgnoreCase("xabank")) {
-            logger.info("Running XA banking benchmark.");
+            logger.info("Running XA banking benchmark using transaction manager {}.", transactionManager);
             int percentageTransfer = 10;
             if (cmd.hasOption("p1")) {
                 percentageTransfer = Integer.parseInt(cmd.getOptionValue("p1"));
             }
             logger.info("XABank benchmark transfer percentage: {}%", percentageTransfer);
-            XABankBenchmark.benchmark(mainHostAddr, postgresAddr, mysqlAddr, interval, duration, percentageTransfer);
+            logger.info("XABank benchmark against postgres@{}, mysql@{}", postgresAddr, mysqlAddr);
+            XABankBenchmark.benchmark(transactionManager, mainHostAddr, postgresAddr, mysqlAddr, interval, duration, percentageTransfer);
         }
     }
 

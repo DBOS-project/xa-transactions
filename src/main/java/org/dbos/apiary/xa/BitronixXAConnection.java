@@ -9,80 +9,66 @@ import org.postgresql.util.PSQLState;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import com.mysql.cj.jdbc.exceptions.MySQLTransactionRollbackException;
+
+import bitronix.tm.BitronixTransactionManager;
+import bitronix.tm.TransactionManagerServices;
+
 import java.lang.reflect.InvocationTargetException;
 import java.sql.SQLException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
-import java.util.TreeMap;
-import java.util.concurrent.atomic.AtomicLong;
 
-public class XAConnection implements ApiaryConnection {
+public class BitronixXAConnection extends XAConnection {
 
-    private AtomicLong xidCounter = new AtomicLong(1);
     private static final Logger logger = LoggerFactory.getLogger(XAConnection.class);
     public static String PostgresDBType = "Postgres";
     public static String MySQLDBType = "MySQL";
-    XADBConnection postgresConnection;
-    XADBConnection mysqlConnection;
-    
+    BitronixXADBConnection pgConnection;
+    BitronixXADBConnection mqConnection;
+    BitronixTransactionManager btm = null;
+    @Override
     public XADBConnection getXAConnection(String DBType) {
         if (DBType.equals(PostgresDBType)) {
-            return postgresConnection;
+            return this.pgConnection;
         } else if (DBType.equals(MySQLDBType)) {
-            return mysqlConnection;
+            return this.mqConnection;
         } else {
             return null;
         }
     }
-
-    public XAConnection(XADBConnection postgresConnection, XADBConnection mysqlConnection) throws SQLException {
-        this.postgresConnection = postgresConnection;
-        this.mysqlConnection = mysqlConnection;
-    }
-
-    private void rollback(ApiaryXID xid, boolean ended) throws Exception{
-        if (ended == false) {
-            getXAConnection(PostgresDBType).XAEnd(xid);
-            getXAConnection(MySQLDBType).XAEnd(xid);
-        }
-        // TODO: persist abort decision ?
-        // Rollback XA transaction in underlying databases
-        getXAConnection(PostgresDBType).XARollback(xid);
-        getXAConnection(MySQLDBType).XARollback(xid);
+    
+    public BitronixXAConnection(BitronixXADBConnection postgresConnection, BitronixXADBConnection mysqlConnection) throws SQLException {
+        super(null,  null);
+        btm = TransactionManagerServices.getTransactionManager();
+        this.pgConnection = postgresConnection;
+        this.mqConnection = mysqlConnection;
+        assert(this.pgConnection != null);
+        assert(this.mqConnection != null);
     }
 
     @Override
     public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, Object... inputs) throws Exception {
         FunctionOutput f = null;
+
+
         while(true) {
             XAContext ctxt = new XAContext(this, workerContext, service, execID, functionID);
-            ApiaryXID xid  = ApiaryXID.fromLong(xidCounter.getAndIncrement());
-            
-            boolean committed = false;
-            boolean ended = false;
             try {
-                // Start XA transaction in underlying databases
-                getXAConnection(PostgresDBType).XAStart(xid);
-                getXAConnection(MySQLDBType).XAStart(xid);
-                // The function would contain transactions across multiple databases.
+                btm.begin();
                 f = workerContext.getFunction(functionName).apiaryRunFunction(ctxt, inputs);
-                // End XA transaction in underlying databases
-                getXAConnection(PostgresDBType).XAEnd(xid);
-                getXAConnection(MySQLDBType).XAEnd(xid);
-                ended =true;
-
-                // Prepare-phase
-                if (getXAConnection(PostgresDBType).XAPrepare(xid) && getXAConnection(MySQLDBType).XAPrepare(xid)) {
-                    // TODO: persist commit decision ?
-                    // Commit-phase
-                    getXAConnection(PostgresDBType).XACommit(xid);
-                    getXAConnection(MySQLDBType).XACommit(xid);
-                    committed = true;
-                    break;
-                }
+                btm.commit();
+                return f;
             } catch (Exception e) {
-                // try again
+                try {
+                    if (btm.getCurrentTransaction() != null) {
+                        btm.rollback();
+                    }
+                } catch (Exception ex) {
+                    logger.info("rollback error");
+                    ex.printStackTrace();
+                }
                 if (e instanceof InvocationTargetException) {
                     Throwable innerException = e;
                     while (innerException instanceof InvocationTargetException) {
@@ -92,23 +78,24 @@ public class XAConnection implements ApiaryConnection {
                     if (innerException instanceof PSQLException) {
                         PSQLException p = (PSQLException) innerException;
                         if (p.getSQLState().equals(PSQLState.SERIALIZATION_FAILURE.getState())) {
-                            try {
-                                rollback(xid, ended);
-                                continue;
-                            } catch (SQLException ex) {
-                                ex.printStackTrace();
-                            }
+                            continue;
                         } else {
-                            logger.info("Unrecoverable XA error: {} {}", p.getMessage(), p.getSQLState());
+                            logger.info("Unrecoverable XA error from PG: {} {}", p.getMessage(), p.getSQLState());
+                        }
+                    } else if (innerException instanceof MySQLTransactionRollbackException) {
+                        MySQLTransactionRollbackException m = (MySQLTransactionRollbackException) innerException;
+                        if (m.getErrorCode() == 1213 || m.getErrorCode() == 1205) {
+                            continue; // Deadlock or lock timed out
+                        } else {
+                            logger.info("Unrecoverable XA error from MySQL: {} {} {}", m.getMessage(), m.getSQLState(), m.getErrorCode());
                         }
                     }
+                } else if (e instanceof bitronix.tm.internal.BitronixRollbackException) {
+                    continue;
                 }
                 logger.info("Unrecoverable error in function execution: {}", e.getMessage());
                 e.printStackTrace();
                 break;
-            }
-            if (!committed) {
-                rollback(xid, ended);
             }
         }
 
@@ -140,8 +127,10 @@ public class XAConnection implements ApiaryConnection {
 
     @Override
     public Map<Integer, String> getPartitionHostMap() {
-        Map<Integer, String> myMap = new TreeMap<Integer, String>();
-        myMap.put(0, "localhost");
+        // Ignore this if not necessary.
+        Map<Integer, String> myMap = new HashMap<Integer, String>() {{
+            put(0, "localhost");
+        }};
         return myMap;
     }
 }

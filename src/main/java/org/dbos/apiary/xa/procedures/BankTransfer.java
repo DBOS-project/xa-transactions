@@ -23,7 +23,6 @@ public class BankTransfer extends XAFunction {
         if (fromAccountBalance <= 0) {
             return 0;
         }
-
         context.executeUpdate(fromDBType, decrementQuery, fromAccountId);
         context.executeUpdate(toDBType, incrementQuery, toAccountId);
         return 1;

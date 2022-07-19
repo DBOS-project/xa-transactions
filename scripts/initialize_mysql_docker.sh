@@ -8,7 +8,7 @@ cd ${SCRIPT_DIR}
 docker pull mysql
 
 # Set the password to dbos, default user is .
-docker run -d --network host --rm --name="apiary-mysql" --env MYSQL_ROOT_PASSWORD=dbos mysql:latest
+docker run -d --network host --rm --name="apiary-mysql" --env MYSQL_ROOT_PASSWORD=dbos --env MYSQL_ROOT_HOST=% mysql/mysql-server:8.0
 
 # Wait a bit.
 sleep 30

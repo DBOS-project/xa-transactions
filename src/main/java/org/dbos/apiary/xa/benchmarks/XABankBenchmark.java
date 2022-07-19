@@ -4,6 +4,8 @@ import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.utilities.ApiaryConfig;
 import org.dbos.apiary.worker.ApiaryNaiveScheduler;
 import org.dbos.apiary.worker.ApiaryWorker;
+import org.dbos.apiary.xa.BitronixXAConnection;
+import org.dbos.apiary.xa.BitronixXADBConnection;
 import org.dbos.apiary.xa.MySQLXAConnection;
 import org.dbos.apiary.xa.PostgresXAConnection;
 import org.dbos.apiary.xa.XAConfig;
@@ -17,14 +19,15 @@ import org.slf4j.LoggerFactory;
 import java.sql.SQLException;
 import java.util.Collection;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class XABankBenchmark {
     private static final Logger logger = LoggerFactory.getLogger(XABankBenchmark.class);
-    private static final int numWorkerThreads = 64;
-    private static final int threadPoolSize = 128;
+    private static final int numWorkerThreads = 3;
+    private static final int threadPoolSize = 3;
     private static final int threadWarmupMs = 5000;  // First 5 seconds of requests would be warm-up and not recorded.
 
     private static final int numAccounts = 1000;
@@ -36,12 +39,40 @@ public class XABankBenchmark {
     private static final Collection<Long> auditTimes = new ConcurrentLinkedQueue<>();
     private static final Collection<Long> transferTimes = new ConcurrentLinkedQueue<>();
 
-    public static void benchmark(String mainHostAddr, String postgresAddr, String mysqlAddr, Integer interval, Integer duration, int percentageTransfer) throws SQLException, InterruptedException {
-        MySQLXAConnection mysqlConn = new MySQLXAConnection(mysqlAddr, XAConfig.postgresPort, "dbos", "root", "dbos");
-        PostgresXAConnection postgresConn = new PostgresXAConnection(postgresAddr, XAConfig.mysqlPort, "dbos", "postgres", "dbos");
-        XAConnection conn = new XAConnection(postgresConn, mysqlConn);
+    static XAConnection getBitronix2MySQLXAConnection(String mysqlAddr) throws SQLException {
+        BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
+        BitronixXADBConnection mysql2Conn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", mysqlAddr, XAConfig.mysql2Port, "dbos", "root", "dbos");
+        // Hack: Use mysqlConn as postgres connection to get a setup with 2 mysql instances.
+        XAConnection conn = new BitronixXAConnection(mysqlConn, mysql2Conn);
+        return conn;
+    }
 
-        resetBankAccountTables(postgresConn, mysqlConn);
+    static XAConnection getBitronixPGMySQLXAConnection(String postgresAddr, String mysqlAddr) throws SQLException {
+        BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
+        BitronixXADBConnection postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
+        XAConnection conn = new BitronixXAConnection(postgresConn, mysqlConn);
+        return conn;
+    }
+
+    static XAConnection getXJPGMySQLXAConnection(String postgresAddr, String mysqlAddr) throws SQLException {
+        MySQLXAConnection mysqlConn = new MySQLXAConnection(mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
+        PostgresXAConnection postgresConn = new PostgresXAConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
+        XAConnection conn = new XAConnection(postgresConn, mysqlConn);
+        return conn;
+    }
+
+    public static void benchmark(String transactionManager, String mainHostAddr, String postgresAddr, String mysqlAddr, Integer interval, Integer duration, int percentageTransfer) throws SQLException, InterruptedException {
+        resetBankAccountTables(postgresAddr, mysqlAddr);
+        XAConnection conn;
+        if (transactionManager.equals("bitronix")) {
+            //conn = getBitronixXAConnection(postgresAddr, mysqlAddr);
+            conn = getBitronix2MySQLXAConnection(mysqlAddr);
+        } else if (transactionManager.equals("xinjing")) {
+            conn = getXJPGMySQLXAConnection(postgresAddr, mysqlAddr);
+        } else {
+            throw new RuntimeException("Unknown transaction manager " + transactionManager);
+        }
+
 
         ApiaryWorker apiaryWorker = null;
         if (mainHostAddr.equalsIgnoreCase("localhost")) {
@@ -61,9 +92,13 @@ public class XABankBenchmark {
         long startTime = System.currentTimeMillis();
         long endTime = startTime + (duration * 1000 + threadWarmupMs);
         AtomicBoolean warmed = new AtomicBoolean(false);
+        AtomicBoolean stopped = new AtomicBoolean(false);
         AtomicBoolean success = new AtomicBoolean(true);
 
         Runnable r = () -> {
+            if (stopped.get() == true) {
+                return;
+            }
             try {
                 long t0 = System.nanoTime();
                 int chooser = ThreadLocalRandom.current().nextInt(100);
@@ -140,8 +175,9 @@ public class XABankBenchmark {
             logger.info("No audit operations");
         }
 
+        stopped.set(true);
         threadPool.shutdown();
-        threadPool.awaitTermination(100000, TimeUnit.SECONDS);
+        threadPool.awaitTermination(10000, TimeUnit.SECONDS);
         logger.info("All queries finished! {}", System.currentTimeMillis() - startTime);
 
         if (apiaryWorker != null) {
@@ -149,7 +185,8 @@ public class XABankBenchmark {
         }
     }
 
-    private static void resetBankAccountTables(PostgresXAConnection postgresConn, MySQLXAConnection mysqlConn) throws SQLException {
+    private static void resetBankAccountTables(String postgresAddr, String mysqlAddr) throws SQLException {
+        PostgresXAConnection postgresConn = new PostgresXAConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");    
         postgresConn.dropTable("FuncInvocations");
         postgresConn.dropTable("BankAccount");
         postgresConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
@@ -159,11 +196,24 @@ public class XABankBenchmark {
             postgresConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, initBalance);
         }
 
+        MySQLXAConnection mysqlConn = new MySQLXAConnection(mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
         mysqlConn.dropTable("BankAccount");
         mysqlConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
         // Initialize the bank accounts.
         for(int i = 0; i < numAccounts; ++i) {
             mysqlConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, initBalance);
         }
+
+        MySQLXAConnection mysql2Conn = new MySQLXAConnection(mysqlAddr, XAConfig.mysql2Port, "dbos", "root", "dbos");
+        mysql2Conn.dropTable("BankAccount");
+        mysql2Conn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
+        // Initialize the bank accounts.
+        for(int i = 0; i < numAccounts; ++i) {
+            mysql2Conn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, initBalance);
+        }
+        
+        postgresConn.close();;
+        mysqlConn.close();
+        mysql2Conn.close();
     }
 }
