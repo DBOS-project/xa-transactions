@@ -19,9 +19,9 @@ public class XAContext extends ApiaryContext {
         this.xaConn = xaConn;
     }
 
-    public void executeUpdate(String DBType, String procedure, Object... input) throws SQLException {
+    public int executeUpdate(String DBType, String procedure, Object... input) throws SQLException {
         // TODO: implement executing updates here.
-        xaConn.getXAConnection(DBType).executeUpdate(procedure, input);
+        return xaConn.getXAConnection(DBType).executeUpdate(procedure, input);
     }
 
     public void recordExecution(org.dbos.apiary.function.FunctionOutput arg0) {}

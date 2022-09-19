@@ -1,5 +1,7 @@
-package org.dbos.apiary.xa.benchmarks;
+package org.dbos.apiary.benchmarks.tpcc;
 
+import org.dbos.apiary.benchmarks.tpcc.procedures.XANewOrderFunction;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XAPaymentFunction;
 import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.mysql.MysqlConnection;
 import org.dbos.apiary.postgres.PostgresConnection;
@@ -29,20 +31,18 @@ import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
-public class XABankBenchmark {
-    private static final Logger logger = LoggerFactory.getLogger(XABankBenchmark.class);
-    private static final int numWorkerThreads = 3;
-    private static final int threadPoolSize = 3;
+public class TPCCBenchmark {
+    private static final Logger logger = LoggerFactory.getLogger(TPCCBenchmark.class);
+    private static final int numWorkerThreads = 5;
+    private static final int threadPoolSize = 5;
     private static final int threadWarmupMs = 5000;  // First 5 seconds of requests would be warm-up and not recorded.
 
-    private static final int numAccounts = 1000;
-    private static final int initBalance = 10000; // TODO: more realistic ones?
     private static String[] DBTypes = {XAConnection.MySQLDBType, XAConnection.PostgresDBType};
-    private static final int correctTotalBalance = numAccounts * initBalance * 2;
 
     // Use the following queues to record execution times.
-    private static final Collection<Long> auditTimes = new ConcurrentLinkedQueue<>();
-    private static final Collection<Long> transferTimes = new ConcurrentLinkedQueue<>();
+    private static final Collection<Long> paymentTimes = new ConcurrentLinkedQueue<>();
+    private static final Collection<Long> newOrderTimes = new ConcurrentLinkedQueue<>();
+    private static final Collection<Long> transactionTimes = new ConcurrentLinkedQueue<>();
 
     static XAConnection getBitronix2MySQLXAConnection(String mysqlAddr) throws SQLException {
         BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
@@ -66,24 +66,28 @@ public class XABankBenchmark {
         return conn;
     }
 
-    public static void benchmark(String transactionManager, String mainHostAddr, String postgresAddr, String mysqlAddr, Integer interval, Integer duration, int percentageTransfer) throws SQLException, InterruptedException {
-        resetBankAccountTables(postgresAddr, mysqlAddr);
+    public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder) throws SQLException, InterruptedException {
         XAConnection conn;
+        TPCCLoader loader;
         if (transactionManager.equals("bitronix")) {
-            //conn = getBitronixXAConnection(postgresAddr, mysqlAddr);
-            conn = getBitronix2MySQLXAConnection(mysqlAddr);
-        } else if (transactionManager.equals("xinjing")) {
-            conn = getXJPGMySQLXAConnection(postgresAddr, mysqlAddr);
+            BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
+            BitronixXADBConnection postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
+            conn = new BitronixXAConnection(postgresConn, mysqlConn);
+            loader = new TPCCLoader(conf, postgresConn, mysqlConn);
         } else {
             throw new RuntimeException("Unknown transaction manager " + transactionManager);
         }
 
+        List<LoaderThread> loaders = loader.createLoaderThreads();
+        ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
+
+        logger.info("TPCC data loading finished");
 
         MysqlConnection mconn;
         PostgresConnection pconn;
         try {
-            mconn = new MysqlConnection(mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
-            pconn = new PostgresConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
+            mconn = new MysqlConnection(conf.getDBAddressMySQL(), XAConfig.mysqlPort, "dbos", "root", "dbos");
+            pconn = new PostgresConnection(conf.getDBAddressPG(), XAConfig.postgresPort, "dbos", "postgres", "dbos");
         } catch (Exception e) {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
             return;
@@ -94,14 +98,17 @@ public class XABankBenchmark {
             // Start a worker in this process. Otherwise, the worker itself could be remote.
             apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numWorkerThreads);
             apiaryWorker.registerConnection(XAConfig.XA, conn);
-            apiaryWorker.registerConnection(XAConfig.mysql, mconn);
-            apiaryWorker.registerConnection(XAConfig.postgres, pconn);
-            apiaryWorker.registerFunction("PGBankTransfer", XAConfig.postgres, PGBankTransfer::new);
-            apiaryWorker.registerFunction("MySQLBankTransfer", XAConfig.mysql, MySQLBankTransfer::new);
-            apiaryWorker.registerFunction("MySQLQueryBalance", ApiaryConfig.mysql, MysqlUpsertPerson::new);
+            // apiaryWorker.registerConnection(XAConfig.mysql, mconn);
+            // apiaryWorker.registerConnection(XAConfig.postgres, pconn);
+            // apiaryWorker.registerFunction("PGBankTransfer", XAConfig.postgres, PGBankTransfer::new);
+            // apiaryWorker.registerFunction("MySQLBankTransfer", XAConfig.mysql, MySQLBankTransfer::new);
+            // apiaryWorker.registerFunction("MySQLQueryBalance", ApiaryConfig.mysql, MysqlUpsertPerson::new);
             apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
             apiaryWorker.registerFunction("BankAudit", XAConfig.XA, BankAudit::new);
             apiaryWorker.registerFunction("BankTransfer", XAConfig.XA, BankTransfer::new);
+
+            apiaryWorker.registerFunction("XANewOrderFunction", XAConfig.XA, XANewOrderFunction::new);
+            apiaryWorker.registerFunction("XAPaymentFunction", XAConfig.XA, XAPaymentFunction::new);
 
             apiaryWorker.startServing();
         }
@@ -122,27 +129,24 @@ public class XABankBenchmark {
             try {
                 long t0 = System.nanoTime();
                 int chooser = ThreadLocalRandom.current().nextInt(100);
-                if (chooser < percentageTransfer) {
-                    int fromAccountId = ThreadLocalRandom.current().nextInt(numAccounts);
-                    int toAccountId = ThreadLocalRandom.current().nextInt(numAccounts);
-                    int fromDBTypeIdx = ThreadLocalRandom.current().nextInt(2);
-                    String fromDBType = DBTypes[fromDBTypeIdx];
-                    String toDBType = DBTypes[1 - fromDBTypeIdx];
+                int warehouseId;
+                do {
+                    warehouseId = ThreadLocalRandom.current().nextInt(conf.getNumWarehouses()) + 1;
+                } while (TPCCLoader.getDBType(warehouseId).equals(TPCCConstants.DBTYPE_POSTGRES) == false);
 
-                    client.get().executeFunction("BankTransfer", fromDBType, toDBType, fromAccountId, toAccountId).getInt();
+                if (chooser < percentageNewOrder) {
+                    client.get().executeFunction("XANewOrderFunction", warehouseId, conf.getNumWarehouses()).getInt();
                     if (warmed.get()) {
-                        transferTimes.add(System.nanoTime() - t0);
+                        newOrderTimes.add(System.nanoTime() - t0);
                     }
                 } else {
-                    int sumBalance = client.get().executeFunction("BankAudit", XAConnection.MySQLDBType, XAConnection.PostgresDBType).getInt();
-
-                    if (sumBalance != correctTotalBalance) {
-                        logger.info("Inconsistency: correct balance {} != actual balance {}", correctTotalBalance, sumBalance);
-                        success.set(false);
-                    }
+                    client.get().executeFunction("XAPaymentFunction", warehouseId, conf.getNumWarehouses()).getInt();
                     if (warmed.get()) {
-                        auditTimes.add(System.nanoTime() - t0);
+                        paymentTimes.add(System.nanoTime() - t0);
                     }
+                }
+                if (warmed.get()) {
+                    transactionTimes.add(System.nanoTime() - t0);
                 }
             } catch (Exception e) {
                 e.printStackTrace();
@@ -155,6 +159,7 @@ public class XABankBenchmark {
             if (!warmed.get() && ((currentTime - startTime) > threadWarmupMs)) {
                 // Finished warmup, start recording.
                 warmed.set(true);
+                logger.info("Warmed up");
             }
             threadPool.submit(r);
             while (System.nanoTime() - t < interval.longValue() * 1000) {
@@ -170,31 +175,40 @@ public class XABankBenchmark {
         } else {
             logger.info("Inconsistency happened.");
         }
-
-        List<Long> queryTimes = transferTimes.stream().map(i -> i / 1000).sorted().collect(Collectors.toList());
+        
+        List<Long> queryTimes = newOrderTimes.stream().map(i -> i / 1000).sorted().collect(Collectors.toList());
         int numQueries = queryTimes.size();
         if (numQueries > 0) {
             long average = queryTimes.stream().mapToLong(i -> i).sum() / numQueries;
             double throughput = (double) numQueries * 1000.0 / elapsedTime;
             long p50 = queryTimes.get(numQueries / 2);
             long p99 = queryTimes.get((numQueries * 99) / 100);
-            logger.info("Transfer Updates Operations: Duration: {} Interval: {}μs Queries: {} TPS: {} Average: {}μs p50: {}μs p99: {}μs", elapsedTime, interval, numQueries, String.format("%.03f", throughput), average, p50, p99);
+            logger.info("New order transactions: Duration: {} Interval: {}μs Queries: {} TPS: {} Average: {}μs p50: {}μs p99: {}μs", elapsedTime, interval, numQueries, String.format("%.03f", throughput), average, p50, p99);
         } else {
-            logger.info("No transfer operations");
+            logger.info("No new order transactions");
         }
 
-        queryTimes = auditTimes.stream().map(i -> i / 1000).sorted().collect(Collectors.toList());
+        queryTimes = paymentTimes.stream().map(i -> i / 1000).sorted().collect(Collectors.toList());
         numQueries = queryTimes.size();
         if (numQueries > 0) {
             long average = queryTimes.stream().mapToLong(i -> i).sum() / numQueries;
             double throughput = (double) numQueries * 1000.0 / elapsedTime;
             long p50 = queryTimes.get(numQueries / 2);
             long p99 = queryTimes.get((numQueries * 99) / 100);
-            logger.info("Audit Read Operations: Duration: {} Interval: {}μs Queries: {} TPS: {} Average: {}μs p50: {}μs p99: {}μs", elapsedTime, interval, numQueries, String.format("%.03f", throughput), average, p50, p99);
+            logger.info("Payment transactions: Duration: {} Interval: {}μs Queries: {} TPS: {} Average: {}μs p50: {}μs p99: {}μs", elapsedTime, interval, numQueries, String.format("%.03f", throughput), average, p50, p99);
         } else {
-            logger.info("No audit operations");
+            logger.info("No payment transactions");
         }
 
+        queryTimes = transactionTimes.stream().map(i -> i / 1000).sorted().collect(Collectors.toList());
+        numQueries = transactionTimes.size();
+        if (numQueries > 0) {
+            long average = queryTimes.stream().mapToLong(i -> i).sum() / numQueries;
+            double throughput = (double) numQueries * 1000.0 / elapsedTime;
+            long p50 = queryTimes.get(numQueries / 2);
+            long p99 = queryTimes.get((numQueries * 99) / 100);
+            logger.info("Total Operations: Duration: {} Interval: {}μs Queries: {} TPS: {} Average: {}μs p50: {}μs p99: {}μs", elapsedTime, interval, numQueries, String.format("%.03f", throughput), average, p50, p99);
+        }
         stopped.set(true);
         threadPool.shutdown();
         threadPool.awaitTermination(10000, TimeUnit.SECONDS);
@@ -203,37 +217,5 @@ public class XABankBenchmark {
         if (apiaryWorker != null) {
             apiaryWorker.shutdown();
         }
-    }
-
-    private static void resetBankAccountTables(String postgresAddr, String mysqlAddr) throws SQLException {
-        PostgresXAConnection postgresConn = new PostgresXAConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");    
-        postgresConn.dropTable("FuncInvocations");
-        postgresConn.dropTable("BankAccount");
-        postgresConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
-
-        // Initialize the bank accounts.
-        for(int i = 0; i < numAccounts; ++i) {
-            postgresConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, initBalance);
-        }
-
-        MySQLXAConnection mysqlConn = new MySQLXAConnection(mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
-        mysqlConn.dropTable("BankAccount");
-        mysqlConn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
-        // Initialize the bank accounts.
-        for(int i = 0; i < numAccounts; ++i) {
-            mysqlConn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, initBalance);
-        }
-
-        MySQLXAConnection mysql2Conn = new MySQLXAConnection(mysqlAddr, XAConfig.mysql2Port, "dbos", "root", "dbos");
-        mysql2Conn.dropTable("BankAccount");
-        mysql2Conn.createTable("BankAccount", "id int PRIMARY KEY NOT NULL, balance int NOT NULL");
-        // Initialize the bank accounts.
-        for(int i = 0; i < numAccounts; ++i) {
-            mysql2Conn.executeUpdate("INSERT INTO BankAccount VALUES(?,?)", i, initBalance);
-        }
-        
-        postgresConn.close();;
-        mysqlConn.close();
-        mysql2Conn.close();
     }
 }

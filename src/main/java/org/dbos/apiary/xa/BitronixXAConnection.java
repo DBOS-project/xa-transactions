@@ -1,5 +1,6 @@
 package org.dbos.apiary.xa;
 
+import org.dbos.apiary.benchmarks.tpcc.UserAbortException;
 import org.dbos.apiary.connection.ApiaryConnection;
 import org.dbos.apiary.function.FunctionOutput;
 import org.dbos.apiary.function.TransactionContext;
@@ -89,11 +90,15 @@ public class BitronixXAConnection extends XAConnection {
                         } else {
                             logger.info("Unrecoverable XA error from MySQL: {} {} {}", m.getMessage(), m.getSQLState(), m.getErrorCode());
                         }
+                    } else if (innerException instanceof UserAbortException) {
+                        continue;
                     }
                 } else if (e instanceof bitronix.tm.internal.BitronixRollbackException) {
                     continue;
+                } else if (e instanceof UserAbortException) {
+                    continue;
                 }
-                logger.info("Unrecoverable error in function execution: {}", e.getMessage());
+                logger.info("Unrecoverable error in function execution: {}", e.toString());
                 e.printStackTrace();
                 break;
             }

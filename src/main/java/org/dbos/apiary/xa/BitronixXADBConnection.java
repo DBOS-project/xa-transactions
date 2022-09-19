@@ -19,8 +19,8 @@ public class BitronixXADBConnection extends BaseXAConnection  {
     private PoolingDataSource ds;
     //private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
-    private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
-    //private static final int kIsolationLevel = Connection.TRANSACTION_REPEATABLE_READ;
+    //private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
+    private static final int kIsolationLevel = Connection.TRANSACTION_REPEATABLE_READ;
     public void close() {
         ds.close();
     }
@@ -84,8 +84,9 @@ public class BitronixXADBConnection extends BaseXAConnection  {
             Connection testConn = ds.getConnection();
             testConn.close();
         } catch (SQLException e) {
-            logger.info("Failed to connect to Postgres");
-            throw new RuntimeException("Failed to connect to Postgres");
+            e.printStackTrace();
+            logger.info("Failed to connect to database ");
+            throw new RuntimeException("Failed to connect to database");
         }
     }
 

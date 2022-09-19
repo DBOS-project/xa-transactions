@@ -144,4 +144,10 @@ public class XAConnection implements ApiaryConnection {
         myMap.put(0, "localhost");
         return myMap;
     }
+
+    @Override
+    public TransactionContext getLatestTransactionContext() {
+        // TODO Auto-generated method stub
+        return null;
+    }
 }

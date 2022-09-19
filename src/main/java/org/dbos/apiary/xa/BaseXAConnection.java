@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
@@ -126,7 +127,15 @@ public abstract class BaseXAConnection implements XADBConnection {
                 ps.setInt(i + 1, (Integer) o);
             } else if (o instanceof String) {
                 ps.setString(i + 1, (String) o);
-            } else {
+            } else if (o instanceof Timestamp) {
+                ps.setTimestamp(i + 1, (Timestamp) o);
+            } else if (o instanceof Double) {
+                ps.setDouble(i + 1, (Double) o);
+            } else if (o instanceof Float) {
+                ps.setFloat(i + 1, (Float) o);
+            } else if (o instanceof Long) {
+                ps.setLong(i + 1, (Long) o);
+            }  else {
                 assert (false); // TODO: More types.
             }
         }
@@ -137,12 +146,12 @@ public abstract class BaseXAConnection implements XADBConnection {
      * @param procedure a SQL DML statement (e.g., INSERT, UPDATE, DELETE).
      * @param input     input parameters for the SQL statement.
      */
-    public void executeUpdate(String procedure, Object... input) throws SQLException {
+    public int executeUpdate(String procedure, Object... input) throws SQLException {
         // First, prepare statement. Then, execute.
         Connection c = getConnection();
         PreparedStatement pstmt = c.prepareStatement(procedure);
         prepareStatement(pstmt, input);
-        pstmt.executeUpdate();
+        return pstmt.executeUpdate();
     }
 
     /**
