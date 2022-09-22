@@ -2,6 +2,10 @@ package org.dbos.apiary.benchmarks.tpcc;
 
 import org.dbos.apiary.benchmarks.tpcc.procedures.XANewOrderFunction;
 import org.dbos.apiary.benchmarks.tpcc.procedures.XAPaymentFunction;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLPaymentGetCustomerByID;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLPaymentGetCustomerByName;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLPaymentPart;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTPaymentFunction;
 import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.mysql.MysqlConnection;
 import org.dbos.apiary.postgres.PostgresConnection;
@@ -20,8 +24,11 @@ import org.dbos.apiary.xa.procedures.BankTransfer;
 import org.dbos.apiary.xa.procedures.GetApiaryClientID;
 import org.dbos.apiary.xa.procedures.xdbshim.MySQLBankTransfer;
 import org.dbos.apiary.xa.procedures.xdbshim.PGBankTransfer;
+import org.postgresql.ds.PGSimpleDataSource;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import com.mysql.cj.jdbc.MysqlDataSource;
 
 import java.sql.SQLException;
 import java.util.Collection;
@@ -64,30 +71,59 @@ public class TPCCBenchmark {
         PostgresXAConnection postgresConn = new PostgresXAConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
         XAConnection conn = new XAConnection(postgresConn, mysqlConn);
         return conn;
+    }  
+
+    static MysqlDataSource getMySQLDataSource(String hostname, Integer port, String databaseName, String databaseUsername, String databasePassword) {
+        MysqlDataSource ds = new MysqlDataSource();
+        // Set dataSource Properties
+        ds.setServerName(hostname);
+        ds.setPortNumber(port);
+        ds.setDatabaseName(databaseName);
+        ds.setUser(databaseUsername);
+        ds.setPassword(databasePassword);
+
+        return ds;
+    }
+
+    static PGSimpleDataSource getPostgresDataSource(String hostname, Integer port, String databaseName, String databaseUsername, String databasePassword) {
+        PGSimpleDataSource ds = new PGSimpleDataSource();
+        ds.setServerNames(new String[] {hostname});
+        ds.setPortNumbers(new int[] {port});
+        ds.setDatabaseName(databaseName);
+        ds.setUser(databaseUsername);
+        ds.setPassword(databasePassword);
+        ds.setSsl(false);
+        return ds;
     }
 
     public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder) throws SQLException, InterruptedException {
-        XAConnection conn;
-        TPCCLoader loader;
+        XAConnection conn = null;
+        
         if (transactionManager.equals("bitronix")) {
             BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
             BitronixXADBConnection postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
             conn = new BitronixXAConnection(postgresConn, mysqlConn);
-            loader = new TPCCLoader(conf, postgresConn, mysqlConn);
+            TPCCLoader loader = new TPCCLoader(conf, postgresConn, mysqlConn);
+            List<LoaderThread> loaders = loader.createLoaderThreads();
+            ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
+        } else if (transactionManager.equals("XDST")) {
+            TPCCLoaderXDST loader = new TPCCLoaderXDST(conf, 
+                getPostgresDataSource(conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos"),
+                getMySQLDataSource(conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos"));
+            List<LoaderThread> loaders = loader.createLoaderThreads();
+            ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
         } else {
             throw new RuntimeException("Unknown transaction manager " + transactionManager);
         }
 
-        List<LoaderThread> loaders = loader.createLoaderThreads();
-        ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
-
+        
         logger.info("TPCC data loading finished");
 
         MysqlConnection mconn;
         PostgresConnection pconn;
         try {
-            mconn = new MysqlConnection(conf.getDBAddressMySQL(), XAConfig.mysqlPort, "dbos", "root", "dbos");
-            pconn = new PostgresConnection(conf.getDBAddressPG(), XAConfig.postgresPort, "dbos", "postgres", "dbos");
+            mconn = new MysqlConnection(conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
+            pconn = new PostgresConnection(conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
         } catch (Exception e) {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
             return;
@@ -97,19 +133,20 @@ public class TPCCBenchmark {
         if (mainHostAddr.equalsIgnoreCase("localhost")) {
             // Start a worker in this process. Otherwise, the worker itself could be remote.
             apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numWorkerThreads);
-            apiaryWorker.registerConnection(XAConfig.XA, conn);
-            // apiaryWorker.registerConnection(XAConfig.mysql, mconn);
-            // apiaryWorker.registerConnection(XAConfig.postgres, pconn);
-            // apiaryWorker.registerFunction("PGBankTransfer", XAConfig.postgres, PGBankTransfer::new);
-            // apiaryWorker.registerFunction("MySQLBankTransfer", XAConfig.mysql, MySQLBankTransfer::new);
-            // apiaryWorker.registerFunction("MySQLQueryBalance", ApiaryConfig.mysql, MysqlUpsertPerson::new);
-            apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
-            apiaryWorker.registerFunction("BankAudit", XAConfig.XA, BankAudit::new);
-            apiaryWorker.registerFunction("BankTransfer", XAConfig.XA, BankTransfer::new);
-
-            apiaryWorker.registerFunction("XANewOrderFunction", XAConfig.XA, XANewOrderFunction::new);
-            apiaryWorker.registerFunction("XAPaymentFunction", XAConfig.XA, XAPaymentFunction::new);
-
+            if (transactionManager.equals("bitronix")) {
+                apiaryWorker.registerConnection(XAConfig.XA, conn);
+                apiaryWorker.registerFunction("XANewOrderFunction", XAConfig.XA, XANewOrderFunction::new);
+                apiaryWorker.registerFunction("XAPaymentFunction", XAConfig.XA, XAPaymentFunction::new);
+                apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
+            } else {
+                apiaryWorker.registerConnection(XAConfig.postgres, pconn);
+                apiaryWorker.registerConnection(XAConfig.mysql, mconn);
+                apiaryWorker.registerFunction("XDSTPaymentFunction", XAConfig.postgres, XDSTPaymentFunction::new);
+                apiaryWorker.registerFunction("XDSTMySQLPaymentPart", XAConfig.mysql, XDSTMySQLPaymentPart::new);
+                apiaryWorker.registerFunction("XDSTMySQLPaymentGetCustomerByID", XAConfig.mysql, XDSTMySQLPaymentGetCustomerByID::new);
+                apiaryWorker.registerFunction("XDSTMySQLPaymentGetCustomerByName", XAConfig.mysql, XDSTMySQLPaymentGetCustomerByName::new);
+                //apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.postgres, GetApiaryClientID::new);
+            }
             apiaryWorker.startServing();
         }
 
@@ -135,12 +172,20 @@ public class TPCCBenchmark {
                 } while (TPCCLoader.getDBType(warehouseId).equals(TPCCConstants.DBTYPE_POSTGRES) == false);
 
                 if (chooser < percentageNewOrder) {
-                    client.get().executeFunction("XANewOrderFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                    if (transactionManager.equals("bitronix")) {
+                        client.get().executeFunction("XANewOrderFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                    } else {
+                        client.get().executeFunction("XDSTPaymentFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                    }
                     if (warmed.get()) {
                         newOrderTimes.add(System.nanoTime() - t0);
                     }
                 } else {
-                    client.get().executeFunction("XAPaymentFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                    if (transactionManager.equals("bitronix")) {
+                        client.get().executeFunction("XAPaymentFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                    } else {
+                        client.get().executeFunction("XDSTPaymentFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                    }
                     if (warmed.get()) {
                         paymentTimes.add(System.nanoTime() - t0);
                     }

@@ -1,9 +1,7 @@
 -- TODO: c_since ON UPDATE CURRENT_TIMESTAMP,
-DROP DATABASE IF EXISTS TPCC;
-CREATE DATABASE TPCC;
-
 DROP TABLE IF EXISTS order_line;
 CREATE TABLE order_line (
+  __apiaryid__ VARCHAR(40) NOT NULL,
   ol_w_id int NOT NULL,
   ol_d_id int NOT NULL,
   ol_o_id int NOT NULL,
@@ -14,23 +12,23 @@ CREATE TABLE order_line (
   ol_supply_w_id int NOT NULL,
   ol_quantity decimal(2,0) NOT NULL,
   ol_dist_info char(24) NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (ol_w_id,ol_d_id,ol_o_id,ol_number)
+  --PRIMARY KEY (ol_w_id,ol_d_id,ol_o_id,ol_number)
+  PRIMARY KEY(__apiaryid__)
 );
 
 DROP TABLE IF EXISTS new_order;
 CREATE TABLE new_order (
+  __apiaryid__ VARCHAR(30) NOT NULL,
   no_w_id int NOT NULL,
   no_d_id int NOT NULL,
   no_o_id int NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (no_w_id,no_d_id,no_o_id)
+  -- PRIMARY KEY (no_w_id,no_d_id,no_o_id)
+  PRIMARY KEY(__apiaryid__)
 );
 
 DROP TABLE IF EXISTS stock;
 CREATE TABLE stock (
+  __apiaryid__ VARCHAR(20) NOT NULL,
   s_w_id int NOT NULL,
   s_i_id int NOT NULL,
   s_quantity decimal(4,0) NOT NULL,
@@ -48,14 +46,14 @@ CREATE TABLE stock (
   s_dist_08 char(24) NOT NULL,
   s_dist_09 char(24) NOT NULL,
   s_dist_10 char(24) NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (s_w_id,s_i_id)
+  -- PRIMARY KEY (s_w_id,s_i_id)
+  PRIMARY KEY (__apiaryid__)
 );
 
 -- TODO: o_entry_d  ON UPDATE CURRENT_TIMESTAMP
 DROP TABLE IF EXISTS oorder;
 CREATE TABLE oorder (
+  __apiaryid__ VARCHAR(30) NOT NULL,
   o_w_id int NOT NULL,
   o_d_id int NOT NULL,
   o_id int NOT NULL,
@@ -64,15 +62,15 @@ CREATE TABLE oorder (
   o_ol_cnt decimal(2,0) NOT NULL,
   o_all_local decimal(1,0) NOT NULL,
   o_entry_d timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (o_w_id,o_d_id,o_id),
-  UNIQUE (o_w_id,o_d_id,o_c_id,o_id)
+  -- PRIMARY KEY (o_w_id,o_d_id,o_id),
+  UNIQUE (o_w_id,o_d_id,o_c_id,o_id),
+  PRIMARY KEY (__apiaryid__)
 );
 
 -- TODO: h_date ON UPDATE CURRENT_TIMESTAMP
 DROP TABLE IF EXISTS history;
 CREATE TABLE history (
+  __apiaryid__ VARCHAR(50) NOT NULL,
   h_c_id int NOT NULL,
   h_c_d_id int NOT NULL,
   h_c_w_id int NOT NULL,
@@ -80,13 +78,13 @@ CREATE TABLE history (
   h_w_id int NOT NULL,
   h_date timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   h_amount decimal(6,2) NOT NULL,
-  h_data varchar(24) NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
+  h_data varchar(24) NOT NULL
+  --KEY (__apiaryid__)
 );
 
 DROP TABLE IF EXISTS customer;
 CREATE TABLE customer (
+  __apiaryid__ VARCHAR(30) NOT NULL,
   c_w_id int NOT NULL,
   c_d_id int NOT NULL,
   c_id int NOT NULL,
@@ -108,13 +106,13 @@ CREATE TABLE customer (
   c_since timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
   c_middle char(2) NOT NULL,
   c_data varchar(500) NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (c_w_id,c_d_id,c_id)
+  -- PRIMARY KEY (c_w_id,c_d_id,c_id)
+  PRIMARY KEY (__apiaryid__)
 );
 
 DROP TABLE IF EXISTS district;
 CREATE TABLE district (
+  __apiaryid__ VARCHAR(20) NOT NULL,
   d_w_id int NOT NULL,
   d_id int NOT NULL,
   d_ytd decimal(12,2) NOT NULL,
@@ -126,26 +124,26 @@ CREATE TABLE district (
   d_city varchar(20) NOT NULL,
   d_state char(2) NOT NULL,
   d_zip char(9) NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (d_w_id,d_id)
+  -- PRIMARY KEY (d_w_id,d_id)
+  PRIMARY KEY (__apiaryid__)
 );
 
 
 DROP TABLE IF EXISTS item;
 CREATE TABLE item (
+  __apiaryid__ VARCHAR(10) NOT NULL,
   i_id int NOT NULL,
   i_name varchar(24) NOT NULL,
   i_price decimal(5,2) NOT NULL,
   i_data varchar(50) NOT NULL,
   i_im_id int NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (i_id)
+  -- PRIMARY KEY (i_id)
+  PRIMARY KEY (__apiaryid__)
 );
 
 DROP TABLE IF EXISTS warehouse;
 CREATE TABLE warehouse (
+  __apiaryid__ VARCHAR(10) NOT NULL,
   w_id int NOT NULL,
   w_ytd decimal(12,2) NOT NULL,
   w_tax decimal(4,4) NOT NULL,
@@ -155,15 +153,15 @@ CREATE TABLE warehouse (
   w_city varchar(20) NOT NULL,
   w_state char(2) NOT NULL,
   w_zip char(9) NOT NULL,
-  __beginVersion__ int DEFAULT 0,
-  __endVersion__ int DEFAULT 0,
-  PRIMARY KEY (w_id)
+  -- PRIMARY KEY (w_id)
+  PRIMARY KEY (__apiaryid__)
 );
 
 
 --add constraints and indexes
 CREATE INDEX idx_customer_name ON customer (c_w_id,c_d_id,c_last,c_first);
 CREATE INDEX idx_order ON oorder (o_w_id,o_d_id,o_c_id,o_id);
+CREATE INDEX idx_hisotry_id ON history (__apiaryid__);
 -- tpcc-mysql create two indexes for the foreign key constraints, Is it really necessary?
 -- CREATE INDEX FKEY_STOCK_2 ON STOCK (S_I_ID);
 -- CREATE INDEX FKEY_ORDER_LINE_2 ON ORDER_LINE (OL_SUPPLY_W_ID,OL_I_ID);

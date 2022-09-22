@@ -28,34 +28,38 @@ import org.dbos.apiary.benchmarks.tpcc.pojo.Customer;
 import org.dbos.apiary.xa.XAContext;
 import org.dbos.apiary.xa.XAFunction;
 
-public class XAPaymentFunction extends XAFunction {
-    private static final Logger LOG = Logger.getLogger(XAPaymentFunction.class);
+import com.google.gson.Gson;
+
+import zmq.io.net.tcp.TcpConnecter;
+
+public class XDSTPaymentFunction extends XAFunction {
+    private static final Logger LOG = Logger.getLogger(XDSTPaymentFunction.class);
     private static Random gen = new Random();
 
     public static String payUpdateWhseSQL = 
             "UPDATE " + TPCCConstants.TABLENAME_WAREHOUSE + 
             "   SET W_YTD = W_YTD + ? " +
-            " WHERE W_ID = ? ";
+            " WHERE __apiaryID__ = ? ";
     
     public static String payGetWhseSQL = 
             "SELECT W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP, W_NAME" + 
             "  FROM " + TPCCConstants.TABLENAME_WAREHOUSE + 
-            " WHERE W_ID = ?";
+            " WHERE __apiaryID__ = ?";
     
     public static String payUpdateDistSQL = 
             "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + 
             "   SET D_YTD = D_YTD + ? " +
-            " WHERE D_W_ID = ? " +
-            "   AND D_ID = ?";
+            " WHERE __apiaryID__ = ? ";
     
     public static String payGetDistSQL = 
             "SELECT D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP, D_NAME" + 
             "  FROM " + TPCCConstants.TABLENAME_DISTRICT + 
-            " WHERE D_W_ID = ? " +
-            "   AND D_ID = ?";
+            " WHERE __apiaryID__ = ? ";
     
     public static String payGetCustSQL = 
-            "SELECT *" +
+            "SELECT C_FIRST, C_MIDDLE, C_LAST, C_STREET_1, C_STREET_2, " + 
+            "       C_CITY, C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, " + 
+            "       C_DISCOUNT, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE " +
             "  FROM " + TPCCConstants.TABLENAME_CUSTOMER + 
             " WHERE C_W_ID = ? " +
             "   AND C_D_ID = ? " +
@@ -89,18 +93,20 @@ public class XAPaymentFunction extends XAFunction {
     
     public static String payInsertHistSQL = 
             "INSERT INTO " + TPCCConstants.TABLENAME_HISTORY + 
-            " (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA) " +
-            " VALUES (?,?,?,?,?,?,?,?)";
+            " (__apiaryID__, H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA) " +
+            " VALUES (?,?,?,?,?,?,?,?,?)";
     
     public static String customerByNameSQL =
-            "SELECT *" +
+            "SELECT C_FIRST, C_MIDDLE, C_ID, C_STREET_1, C_STREET_2, C_CITY, " + 
+            "       C_STATE, C_ZIP, C_PHONE, C_CREDIT, C_CREDIT_LIM, C_DISCOUNT, " +
+            "       C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_SINCE " +
             "  FROM " + TPCCConstants.TABLENAME_CUSTOMER + 
             " WHERE C_W_ID = ? " +
             "   AND C_D_ID = ? " +
             "   AND C_LAST = ? " +
             " ORDER BY C_FIRST";
 
-    public static int runFunction(XAContext context, int w_id, int numWarehouses) throws Exception {
+    public static int runFunction(org.dbos.apiary.postgres.PostgresContext context, int w_id, int numWarehouses) throws Exception {
         
         String homeWarehouseDBType = TPCCLoader.getDBType(w_id);
         assert(homeWarehouseDBType.equals(TPCCConstants.DBTYPE_POSTGRES));
@@ -162,8 +168,8 @@ public class XAPaymentFunction extends XAFunction {
         String w_street_1, w_street_2, w_city, w_state, w_zip, w_name;
         String d_street_1, d_street_2, d_city, d_state, d_zip, d_name;
 
-        int result = context.executeUpdate(homeWarehouseDBType, payUpdateWhseSQL, paymentAmount, w_id);
-
+        //int result = context.executeUpdate(homeWarehouseDBType, payUpdateWhseSQL, paymentAmount, w_id);
+        context.executeUpdate(payUpdateWhseSQL, paymentAmount, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_WAREHOUSE, w_id));
         // PreparedStatement payUpdateWhse = conn.getPreparedStatement(DBType, SQL);
 
         // payUpdateWhse.setDouble(1, paymentAmount);
@@ -171,12 +177,13 @@ public class XAPaymentFunction extends XAFunction {
         // MySQL reports deadlocks due to lock upgrades:
         // t1: read w_id = x; t2: update w_id = x; t1 update w_id = x
         //int result = payUpdateWhse.executeUpdate();
-        if (result == 0)
-            throw new RuntimeException("W_ID=" + w_id + " not found!");
+        // if (result == 0)
+        //     throw new RuntimeException("W_ID=" + w_id + " not found!");
 
         // payGetWhse.setInt(1, w_id);
         // ResultSet rs = payGetWhse.executeQuery();
-        ResultSet rs = context.executeQuery(homeWarehouseDBType, payGetWhseSQL, w_id);
+        //ResultSet rs = context.executeQuery(homeWarehouseDBType, payGetWhseSQL, w_id);
+        ResultSet rs = context.executeQuery(payGetWhseSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_WAREHOUSE, w_id));
         if (!rs.next())
             throw new RuntimeException("W_ID=" + w_id + " not found!");
         w_street_1 = rs.getString("W_STREET_1");
@@ -188,18 +195,20 @@ public class XAPaymentFunction extends XAFunction {
         rs.close();
         rs = null;
 
-        result = context.executeUpdate(homeWarehouseDBType, payUpdateDistSQL, paymentAmount, w_id, districtID);
+        //result = context.executeUpdate(homeWarehouseDBType, payUpdateDistSQL, paymentAmount, w_id, districtID);
+        context.executeUpdate(payUpdateDistSQL, paymentAmount, TPCCUtil.makeApiaryId( TPCCConstants.TABLENAME_DISTRICT, w_id, districtID));
         // payUpdateDist.setDouble(1, paymentAmount);
         // payUpdateDist.setInt(2, w_id);
         // payUpdateDist.setInt(3, districtID);
         // result = payUpdateDist.executeUpdate();
-        if (result == 0)
-            throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
+        // if (result == 0)
+        //     throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
 
         // payGetDist.setInt(1, w_id);
         // payGetDist.setInt(2, districtID);
         // rs = payGetDist.executeQuery();
-        rs = context.executeQuery(homeWarehouseDBType, payGetDistSQL, w_id, districtID);
+        //rs = context.executeQuery(homeWarehouseDBType, payGetDistSQL, w_id, districtID);
+        rs = context.executeQuery(payGetDistSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_DISTRICT, w_id, districtID));
         if (!rs.next())
             throw new RuntimeException("D_ID=" + districtID + " D_W_ID=" + w_id + " not found!");
         d_street_1 = rs.getString("D_STREET_1");
@@ -212,61 +221,67 @@ public class XAPaymentFunction extends XAFunction {
         rs = null;
 
         Customer c;
+        Gson gson = new Gson();
         if (customerByName) {
             assert customerID <= 0;
-            c = getCustomerByName(context, customerWarehouseID, customerDistrictID, customerLastName);
+            String cJson = context.apiaryCallFunction("XDSTMySQLPaymentGetCustomerByName", customerWarehouseID, customerDistrictID, customerLastName).getString();
+            c = gson.fromJson(cJson, Customer.class);
         } else {
             assert customerLastName == null;
-            c = getCustomerById(context, customerWarehouseID, customerDistrictID, customerID);
+            String cJson = context.apiaryCallFunction("XDSTMySQLPaymentGetCustomerByID", customerWarehouseID, customerDistrictID, customerID).getString();
+            c = gson.fromJson(cJson, Customer.class);
         }
 
         c.c_balance -= paymentAmount;
         c.c_ytd_payment += paymentAmount;
         c.c_payment_cnt += 1;
-        String c_data = null;
-        if (c.c_credit.equals("BC")) { // bad credit
-            // payGetCustCdata.setInt(1, customerWarehouseID);
-            // payGetCustCdata.setInt(2, customerDistrictID);
-            // payGetCustCdata.setInt(3, c.c_id);
-            // rs = payGetCustCdata.executeQuery();
-            rs = context.executeQuery(customerWarehouseDBType, payGetCustCdataSQL, customerWarehouseID, customerDistrictID, c.c_id);
-            if (!rs.next())
-                throw new RuntimeException("C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID + " not found!");
-            c_data = rs.getString("C_DATA");
-            rs.close();
-            rs = null;
+        // String c_data = null;
+        // if (c.c_credit.equals("BC")) { // bad credit
+        //     // payGetCustCdata.setInt(1, customerWarehouseID);
+        //     // payGetCustCdata.setInt(2, customerDistrictID);
+        //     // payGetCustCdata.setInt(3, c.c_id);
+        //     // rs = payGetCustCdata.executeQuery();
+        //     rs = context.executeQuery(customerWarehouseDBType, payGetCustCdataSQL, customerWarehouseID, customerDistrictID, c.c_id);
+        //     if (!rs.next())
+        //         throw new RuntimeException("C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID + " not found!");
+        //     c_data = rs.getString("C_DATA");
+        //     rs.close();
+        //     rs = null;
 
-            c_data = c.c_id + " " + customerDistrictID + " " + customerWarehouseID + " " + districtID + " " + w_id + " " + paymentAmount + " | " + c_data;
-            if (c_data.length() > 500)
-                c_data = c_data.substring(0, 500);
+        //     c_data = c.c_id + " " + customerDistrictID + " " + customerWarehouseID + " " + districtID + " " + w_id + " " + paymentAmount + " | " + c_data;
+        //     if (c_data.length() > 500)
+        //         c_data = c_data.substring(0, 500);
 
-            // payUpdateCustBalCdata.setDouble(1, c.c_balance);
-            // payUpdateCustBalCdata.setDouble(2, c.c_ytd_payment);
-            // payUpdateCustBalCdata.setInt(3, c.c_payment_cnt);
-            // payUpdateCustBalCdata.setString(4, c_data);
-            // payUpdateCustBalCdata.setInt(5, customerWarehouseID);
-            // payUpdateCustBalCdata.setInt(6, customerDistrictID);
-            // payUpdateCustBalCdata.setInt(7, c.c_id);
-            // result = payUpdateCustBalCdata.executeUpdate();
+        //     // payUpdateCustBalCdata.setDouble(1, c.c_balance);
+        //     // payUpdateCustBalCdata.setDouble(2, c.c_ytd_payment);
+        //     // payUpdateCustBalCdata.setInt(3, c.c_payment_cnt);
+        //     // payUpdateCustBalCdata.setString(4, c_data);
+        //     // payUpdateCustBalCdata.setInt(5, customerWarehouseID);
+        //     // payUpdateCustBalCdata.setInt(6, customerDistrictID);
+        //     // payUpdateCustBalCdata.setInt(7, c.c_id);
+        //     // result = payUpdateCustBalCdata.executeUpdate();
             
-            result = context.executeUpdate(customerWarehouseDBType, payUpdateCustBalCdataSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, c_data, customerWarehouseID, customerDistrictID, c.c_id);
-            if (result == 0)
-                throw new RuntimeException("Error in PYMNT Txn updating Customer C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID);
+        //     //result = context.executeUpdate(customerWarehouseDBType, payUpdateCustBalCdataSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, c_data, customerWarehouseID, customerDistrictID, c.c_id);
+        //     context.executeUpdate(customerWarehouseDBType, payUpdateCustBalCdataSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, c_data, customerWarehouseID, customerDistrictID, c.c_id);
+        //     // if (result == 0)
+        //     //     throw new RuntimeException("Error in PYMNT Txn updating Customer C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID);
 
-        } else { // GoodCredit
+        // } else { // GoodCredit
 
-            // payUpdateCustBal.setDouble(1, c.c_balance);
-            // payUpdateCustBal.setDouble(2, c.c_ytd_payment);
-            // payUpdateCustBal.setInt(3, c.c_payment_cnt);
-            // payUpdateCustBal.setInt(4, customerWarehouseID);
-            // payUpdateCustBal.setInt(5, customerDistrictID);
-            // payUpdateCustBal.setInt(6, c.c_id);
-            // result = payUpdateCustBal.executeUpdate();
-            result = context.executeUpdate(customerWarehouseDBType, payUpdateCustBalSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, customerWarehouseID, customerDistrictID, c.c_id);
-            if (result == 0)
-                throw new RuntimeException("C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID + " not found!");
-
-        }
+        //     // payUpdateCustBal.setDouble(1, c.c_balance);
+        //     // payUpdateCustBal.setDouble(2, c.c_ytd_payment);
+        //     // payUpdateCustBal.setInt(3, c.c_payment_cnt);
+        //     // payUpdateCustBal.setInt(4, customerWarehouseID);
+        //     // payUpdateCustBal.setInt(5, customerDistrictID);
+        //     // payUpdateCustBal.setInt(6, c.c_id);
+        //     // result = payUpdateCustBal.executeUpdate();
+        //     // result = context.executeUpdate(customerWarehouseDBType, payUpdateCustBalSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, customerWarehouseID, customerDistrictID, c.c_id);
+        //     // if (result == 0)
+        //     //     throw new RuntimeException("C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID + " not found!");
+        //     context.executeUpdate(customerWarehouseDBType, payUpdateCustBalSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, customerWarehouseID, customerDistrictID, c.c_id);
+        // }
+        int r = context.apiaryCallFunction("XDSTMySQLPaymentPart", gson.toJson(c), customerWarehouseID, customerDistrictID, w_id, districtID, paymentAmount).getInt();
+        assert (r == 0);
 
         if (w_name.length() > 10)
             w_name = w_name.substring(0, 10);
@@ -283,7 +298,7 @@ public class XAPaymentFunction extends XAFunction {
         // payInsertHist.setDouble(7, paymentAmount);
         // payInsertHist.setString(8, h_data);
         // payInsertHist.executeUpdate();
-        context.executeUpdate(homeWarehouseDBType, payInsertHistSQL, customerDistrictID, customerWarehouseID, c.c_id, districtID, w_id,  
+        context.executeUpdate(payInsertHistSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_HISTORY, c.c_id, customerDistrictID, customerWarehouseID, districtID, w_id), customerDistrictID, customerWarehouseID, c.c_id, districtID, w_id,  
                                 TPCCLoader.getTimestamp(System.currentTimeMillis()), paymentAmount, h_data);
         //conn.commit();
 
@@ -351,77 +366,21 @@ public class XAPaymentFunction extends XAFunction {
             terminalMessage.append(c.c_credit_lim);
             terminalMessage.append("\n New Cust-Balance: ");
             terminalMessage.append(c.c_balance);
-            if (c.c_credit.equals("BC")) {
-                if (c_data.length() > 50) {
-                    terminalMessage.append("\n\n Cust-Data: " + c_data.substring(0, 50));
-                    int data_chunks = c_data.length() > 200 ? 4 : c_data.length() / 50;
-                    for (int n = 1; n < data_chunks; n++)
-                        terminalMessage.append("\n            " + c_data.substring(n * 50, (n + 1) * 50));
-                } else {
-                    terminalMessage.append("\n\n Cust-Data: " + c_data);
-                }
-            }
+            // if (c.c_credit.equals("BC")) {
+            //     if (c_data.length() > 50) {
+            //         terminalMessage.append("\n\n Cust-Data: " + c_data.substring(0, 50));
+            //         int data_chunks = c_data.length() > 200 ? 4 : c_data.length() / 50;
+            //         for (int n = 1; n < data_chunks; n++)
+            //             terminalMessage.append("\n            " + c_data.substring(n * 50, (n + 1) * 50));
+            //     } else {
+            //         terminalMessage.append("\n\n Cust-Data: " + c_data);
+            //     }
+            // }
             terminalMessage.append("\n+-----------------------------------------------------------------+\n\n");
 
             LOG.trace(terminalMessage.toString());
         }
 
         return 0;
-    }
-
-        // attention duplicated code across trans... ok for now to maintain separate
-    // prepared statements
-    public static Customer getCustomerById(XAContext context, int c_w_id, int c_d_id, int c_id) throws SQLException {
-        String customerWarehouseDBType = TPCCLoader.getDBType(c_w_id);
-        // payGetCust.setInt(1, c_w_id);
-        // payGetCust.setInt(2, c_d_id);
-        // payGetCust.setInt(3, c_id);
-        // ResultSet rs = payGetCust.executeQuery();
-        ResultSet rs = context.executeQuery(customerWarehouseDBType, payGetCustSQL, c_w_id, c_d_id, c_id);
-        if (!rs.next()) {
-            throw new RuntimeException("C_ID=" + c_id + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
-        }
-
-        Customer c = TPCCUtil.newCustomerFromResults(rs);
-        c.c_id = c_id;
-        c.c_last = rs.getString("C_LAST");
-        rs.close();
-        return c;
-    }
-
-
-    // attention this code is repeated in other transacitons... ok for now to
-    // allow for separate statements.
-    public static Customer getCustomerByName(XAContext context, int c_w_id, int c_d_id, String customerLastName) throws SQLException {
-        String customerWarehouseDBType = TPCCLoader.getDBType(c_w_id);
-        ArrayList<Customer> customers = new ArrayList<Customer>();
-
-        // customerByName.setInt(1, c_w_id);
-        // customerByName.setInt(2, c_d_id);
-        // customerByName.setString(3, customerLastName);
-        // ResultSet rs = customerByName.executeQuery();
-        ResultSet rs = context.executeQuery(customerWarehouseDBType, customerByNameSQL, c_w_id, c_d_id, customerLastName);
-        if (LOG.isTraceEnabled()) LOG.trace("C_LAST=" + customerLastName + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id);
-
-        while (rs.next()) {
-            Customer c = TPCCUtil.newCustomerFromResults(rs);
-            c.c_id = rs.getInt("C_ID");
-            c.c_last = customerLastName;
-            customers.add(c);
-        }
-        rs.close();
-
-        if (customers.size() == 0) {
-            throw new RuntimeException("C_LAST=" + customerLastName + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
-        }
-
-        // TPC-C 2.5.2.2: Position n / 2 rounded up to the next integer, but
-        // that
-        // counts starting from 1.
-        int index = customers.size() / 2;
-        if (customers.size() % 2 == 0) {
-            index -= 1;
-        }
-        return customers.get(index);
     }
 }
