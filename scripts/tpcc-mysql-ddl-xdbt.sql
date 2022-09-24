@@ -20,7 +20,7 @@ DROP TABLE IF EXISTS WAREHOUSE;
 CREATE TABLE CUSTOMER (
   __apiaryID__ VARCHAR(30) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   C_W_ID INT NOT NULL,
   C_D_ID INT NOT NULL,
   C_ID INT NOT NULL,
@@ -43,14 +43,15 @@ CREATE TABLE CUSTOMER (
   C_MIDDLE CHAR(2) NOT NULL,
   C_DATA VARCHAR(500) NOT NULL,
   -- PRIMARY KEY (C_W_ID,C_D_ID,C_ID),
-  KEY(__apiaryID__)
+  KEY(__apiaryID__),
+  KEY(__endVersion__)
 );
 
 
 CREATE TABLE DISTRICT (
   __apiaryID__ VARCHAR(30) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   D_W_ID INT NOT NULL,
   D_ID INT NOT NULL,
   D_YTD DECIMAL(12,2) NOT NULL,
@@ -63,7 +64,8 @@ CREATE TABLE DISTRICT (
   D_STATE CHAR(2) NOT NULL,
   D_ZIP CHAR(9) NOT NULL,
   -- PRIMARY KEY (D_W_ID,D_ID)
-  KEY(__apiaryID__)
+  KEY(__apiaryID__),
+  KEY(__endVersion__)
 );
 
 -- TODO: H_DATE ON UPDATE CURRENT_TIMESTAMP
@@ -71,7 +73,7 @@ CREATE TABLE DISTRICT (
 CREATE TABLE HISTORY (
   __apiaryID__ VARCHAR(50) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   H_C_ID INT NOT NULL,
   H_C_D_ID INT NOT NULL,
   H_C_W_ID INT NOT NULL,
@@ -80,33 +82,36 @@ CREATE TABLE HISTORY (
   H_DATE TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   H_AMOUNT DECIMAL(6,2) NOT NULL,
   H_DATA VARCHAR(24) NOT NULL,
-  KEY(__apiaryID__)
+  KEY(__apiaryID__),
+  KEY(__endVersion__)
 );
 
 
 CREATE TABLE ITEM (
   __apiaryID__ VARCHAR(20) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   I_ID INT NOT NULL,
   I_NAME VARCHAR(24) NOT NULL,
   I_PRICE DECIMAL(5,2) NOT NULL,
   I_DATA VARCHAR(50) NOT NULL,
   I_IM_ID INT NOT NULL,
   -- PRIMARY KEY (I_ID)
-  KEY(__apiaryID__)
+  KEY(__apiaryID__),
+  KEY(__endVersion__)
 );
 
 
 CREATE TABLE NEW_ORDER (
   __apiaryID__ VARCHAR(30) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   NO_W_ID INT NOT NULL,
   NO_D_ID INT NOT NULL,
   NO_O_ID INT NOT NULL,
   -- PRIMARY KEY (NO_W_ID,NO_D_ID,NO_O_ID)
-  KEY(__apiaryID__)
+  KEY(__apiaryID__),
+  KEY(__endVersion__)
 );
 
 -- TODO: O_ENTRY_D  ON UPDATE CURRENT_TIMESTAMP
@@ -114,7 +119,7 @@ CREATE TABLE NEW_ORDER (
 CREATE TABLE OORDER (
   __apiaryID__ VARCHAR(40) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   O_W_ID INT NOT NULL,
   O_D_ID INT NOT NULL,
   O_ID INT NOT NULL,
@@ -125,14 +130,15 @@ CREATE TABLE OORDER (
   O_ENTRY_D TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   -- PRIMARY KEY (O_W_ID,O_D_ID,O_ID),
   UNIQUE (O_W_ID,O_D_ID,O_C_ID,O_ID),
-  KEY (__apiaryID__)
+  KEY (__apiaryID__),
+  KEY(__endVersion__)
 );
 
 
 CREATE TABLE ORDER_LINE (
   __apiaryID__ VARCHAR(40) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   OL_W_ID INT NOT NULL,
   OL_D_ID INT NOT NULL,
   OL_O_ID INT NOT NULL,
@@ -144,13 +150,14 @@ CREATE TABLE ORDER_LINE (
   OL_QUANTITY DECIMAL(2,0) NOT NULL,
   OL_DIST_INFO CHAR(24) NOT NULL,
   -- PRIMARY KEY (OL_W_ID,OL_D_ID,OL_O_ID,OL_NUMBER)
-  KEY (__apiaryID__)
+  KEY (__apiaryID__),
+  KEY(__endVersion__)
 );
 
 CREATE TABLE STOCK (
   __apiaryID__ VARCHAR(20) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   S_W_ID INT NOT NULL,
   S_I_ID INT NOT NULL,
   S_QUANTITY DECIMAL(4,0) NOT NULL,
@@ -169,13 +176,14 @@ CREATE TABLE STOCK (
   S_DIST_09 CHAR(24) NOT NULL,
   S_DIST_10 CHAR(24) NOT NULL,
   -- PRIMARY KEY (S_W_ID,S_I_ID)
-  KEY (__apiaryID__)
+  KEY (__apiaryID__),
+  KEY(__endVersion__)
 );
 
 CREATE TABLE WAREHOUSE (
   __apiaryID__ VARCHAR(10) NOT NULL,
   __beginVersion__ bigint DEFAULT 0,
-  __endVersion__ bigint DEFAULT 2147483647,
+  __endVersion__ bigint DEFAULT 9223372036854775807,
   W_ID INT NOT NULL,
   W_YTD DECIMAL(12,2) NOT NULL,
   W_TAX DECIMAL(4,4) NOT NULL,
@@ -186,7 +194,8 @@ CREATE TABLE WAREHOUSE (
   W_STATE CHAR(2) NOT NULL,
   W_ZIP CHAR(9) NOT NULL,
   -- PRIMARY KEY (W_ID)
-  KEY (__apiaryID__)
+  KEY (__apiaryID__),
+  KEY(__endVersion__)
 );
 
 -- INDEXES

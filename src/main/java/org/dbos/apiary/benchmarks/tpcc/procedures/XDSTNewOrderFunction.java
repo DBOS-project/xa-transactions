@@ -17,6 +17,9 @@
 package org.dbos.apiary.benchmarks.tpcc.procedures;
 
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Random;
 
 import org.apache.log4j.Logger;
@@ -24,9 +27,13 @@ import org.apache.log4j.Logger;
 import org.dbos.apiary.benchmarks.tpcc.*;
 import org.dbos.apiary.xa.XAContext;
 import org.dbos.apiary.xa.XAFunction;
+import java.lang.reflect.Type;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 
-public class XDSTPGNewOrderFunction extends XAFunction {
-    private static final Logger LOG = Logger.getLogger(XDSTPGNewOrderFunction.class);
+
+public class XDSTNewOrderFunction extends XAFunction {
+    private static final Logger LOG = Logger.getLogger(XDSTNewOrderFunction.class);
     private static Random gen = new Random();
 
     public static final String stmtGetCustSQL = 
@@ -48,8 +55,8 @@ public class XDSTPGNewOrderFunction extends XAFunction {
 
     public static final String stmtInsertNewOrderSQL = 
         "INSERT INTO " + TPCCConstants.TABLENAME_NEWORDER +
-        " (NO_O_ID, NO_D_ID, NO_W_ID) " +
-        " VALUES ( ?, ?, ?)";
+        " (__apiaryid__, NO_O_ID, NO_D_ID, NO_W_ID) " +
+        " VALUES (?, ?, ?, ?)";
 
     public static final String  stmtUpdateDistSQL = 
         "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + 
@@ -59,20 +66,19 @@ public class XDSTPGNewOrderFunction extends XAFunction {
 
     public static final String  stmtInsertOOrderSQL = 
         "INSERT INTO " + TPCCConstants.TABLENAME_OPENORDER + 
-        " (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)" + 
-        " VALUES (?, ?, ?, ?, ?, ?, ?)";
+        " (__apiaryid__, O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)" + 
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
     public static final String  stmtGetItemSQL = 
         "SELECT I_PRICE, I_NAME , I_DATA " +
         "  FROM " + TPCCConstants.TABLENAME_ITEM + 
-        " WHERE I_ID = ?";
+        " WHERE __apiaryid__ = ?";
 
     public static final String  stmtGetStockSQL = 
-        "SELECT S_QUANTITY, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05, " +
+        "SELECT S_QUANTITY,  S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05, " +
         "       S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10" +
         "  FROM " + TPCCConstants.TABLENAME_STOCK + 
-        " WHERE S_I_ID = ? " +
-        "   AND S_W_ID = ? FOR UPDATE";
+        " WHERE __apiaryid__ = ? FOR UPDATE";
 
     public static final String  stmtUpdateStockSQL = 
         "UPDATE " + TPCCConstants.TABLENAME_STOCK + 
@@ -80,13 +86,152 @@ public class XDSTPGNewOrderFunction extends XAFunction {
         "       S_YTD = S_YTD + ?, " + 
         "       S_ORDER_CNT = S_ORDER_CNT + 1, " +
         "       S_REMOTE_CNT = S_REMOTE_CNT + ? " +
-        " WHERE S_I_ID = ? " +
-        "   AND S_W_ID = ?";
+        " WHERE __apiaryid__ = ? ";
 
     public static final String  stmtInsertOrderLineSQL = 
     "INSERT INTO " + TPCCConstants.TABLENAME_ORDERLINE + 
-    " (OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER, OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DIST_INFO) " +
-    " VALUES (?,?,?,?,?,?,?,?,?)";
+    " (__apiaryid__,OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER, OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DIST_INFO) " +
+    " VALUES (?,?,?,?,?,?,?,?,?,?)";
+
+	public static Map<String, Object> orderLineLogic(org.dbos.apiary.postgres.PostgresContext context, int ol_supply_w_id, int ol_i_id, int ol_quantity, int ol_number, int o_ol_cnt, int w_id, int d_id) throws Exception {
+		String supplyWarehouseDBType = TPCCLoader.getDBType(ol_supply_w_id);
+		if (supplyWarehouseDBType.equals(TPCCConstants.DBTYPE_MYSQL)) {
+			Gson gson = new Gson();
+			String cJson = context.apiaryCallFunction("XDSTMySQLNewOrderPart", ol_supply_w_id, ol_i_id, ol_quantity, ol_number, o_ol_cnt, w_id, d_id).getString();
+            Type resMapType = new TypeToken<Map<String, Object>>() {}.getType();
+			Map<String, Object> resMap = gson.fromJson(cJson, resMapType);
+			return resMap;
+		}
+		Map<String, Object> resMap = new HashMap<>();
+		String ol_dist_info = new String();
+		// stmtGetItem.setInt(1, ol_i_id);
+		// rs = stmtGetItem.executeQuery();
+		ResultSet rs = context.executeQuery(stmtGetItemSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_ITEM, ol_i_id));
+		if (!rs.next()) {
+			// This is (hopefully) an expected error: this is an
+			// expected new order rollback
+			assert ol_number == o_ol_cnt;
+			assert ol_i_id == TPCCConfig.INVALID_ITEM_ID;
+			rs.close();
+			throw new UserAbortException(
+					"EXPECTED new order rollback: I_ID=" + ol_i_id
+							+ " not found!");
+		}
+
+		double i_price = rs.getFloat("I_PRICE");
+		String i_name = rs.getString("I_NAME");
+		String i_data = rs.getString("I_DATA");
+		rs.close();
+		rs = null;
+
+		// itemPrices[ol_number - 1] = i_price;
+		// itemNames[ol_number - 1] = i_name;
+		resMap.put("i_price", Double.valueOf(i_price));
+		resMap.put("i_name", i_name);
+		resMap.put("i_data", i_data);
+
+		// stmtGetStock.setInt(1, ol_i_id);
+		// stmtGetStock.setInt(2, ol_supply_w_id);
+		// rs = stmtGetStock.executeQuery();
+		rs = context.executeQuery(stmtGetStockSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, ol_supply_w_id, ol_i_id));
+		if (!rs.next())
+			throw new RuntimeException("I_ID=" + ol_i_id
+					+ " not found!");
+		int s_quantity = rs.getInt("S_QUANTITY");
+		String s_data = rs.getString("S_DATA");
+		String s_dist_01 = rs.getString("S_DIST_01");
+		String s_dist_02 = rs.getString("S_DIST_02");
+		String s_dist_03 = rs.getString("S_DIST_03");
+		String s_dist_04 = rs.getString("S_DIST_04");
+		String s_dist_05 = rs.getString("S_DIST_05");
+		String s_dist_06 = rs.getString("S_DIST_06");
+		String s_dist_07 = rs.getString("S_DIST_07");
+		String s_dist_08 = rs.getString("S_DIST_08");
+		String s_dist_09 = rs.getString("S_DIST_09");
+		String s_dist_10 = rs.getString("S_DIST_10");
+		rs.close();
+		rs = null;
+
+		//stockQuantities[ol_number - 1] = s_quantity;
+		resMap.put("old_s_quantity", s_quantity);
+
+		if (s_quantity - ol_quantity >= 10) {
+			s_quantity -= ol_quantity;
+		} else {
+			s_quantity += -ol_quantity + 91;
+		}
+
+		resMap.put("new_s_quantity", s_quantity);
+		
+		int s_remote_cnt_increment = 0;
+		if (ol_supply_w_id == w_id) {
+			s_remote_cnt_increment = 0;
+		} else {
+			s_remote_cnt_increment = 1;
+		}
+
+
+		// stmtUpdateStock.setInt(1, s_quantity);
+		// stmtUpdateStock.setInt(2, ol_quantity);
+		// stmtUpdateStock.setInt(3, s_remote_cnt_increment);
+		// stmtUpdateStock.setInt(4, ol_i_id);
+		// stmtUpdateStock.setInt(5, ol_supply_w_id);
+		// stmtUpdateStock.addBatch();
+		context.executeUpdate(stmtUpdateStockSQL, s_quantity, ol_quantity, s_remote_cnt_increment, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, ol_supply_w_id, ol_i_id));
+
+		double ol_amount = ol_quantity * i_price;
+		resMap.put("ol_amount", Double.valueOf(ol_amount));
+		// orderLineAmounts[ol_number - 1] = ol_amount;
+		// total_amount += ol_amount;
+
+		if (i_data.indexOf("ORIGINAL") != -1
+				&& s_data.indexOf("ORIGINAL") != -1) {
+			//brandGeneric[ol_number - 1] = 'B';
+			resMap.put("brandGeneric", "B");
+		} else {
+			//brandGeneric[ol_number - 1] = 'G';
+			resMap.put("brandGeneric", "G");
+		}
+
+		
+
+		switch ((int) d_id) {
+		case 1:
+			ol_dist_info = s_dist_01;
+			break;
+		case 2:
+			ol_dist_info = s_dist_02;
+			break;
+		case 3:
+			ol_dist_info = s_dist_03;
+			break;
+		case 4:
+			ol_dist_info = s_dist_04;
+			break;
+		case 5:
+			ol_dist_info = s_dist_05;
+			break;
+		case 6:
+			ol_dist_info = s_dist_06;
+			break;
+		case 7:
+			ol_dist_info = s_dist_07;
+			break;
+		case 8:
+			ol_dist_info = s_dist_08;
+			break;
+		case 9:
+			ol_dist_info = s_dist_09;
+			break;
+		case 10:
+			ol_dist_info = s_dist_10;
+			break;
+		}
+
+		resMap.put("ol_dist_info", ol_dist_info);
+
+		return resMap;
+	}
 
     public static int runFunction(org.dbos.apiary.postgres.PostgresContext context, int terminalWarehouseID, int numWarehouses) throws Exception {
         int districtID = TPCCUtil.randomNumber(1,TPCCConfig.configDistPerWhse, gen);
@@ -116,28 +261,28 @@ public class XDSTPGNewOrderFunction extends XAFunction {
             orderQuantities[i] = TPCCUtil.randomNumber(1, 10, gen);
         }
 
-        // we need to cause 1% of the new orders to be rolled back.
-        if (TPCCUtil.randomNumber(1, 100, gen) == 1)
-            itemIDs[numItems - 1] = TPCCConfig.INVALID_ITEM_ID;
+        // TODO: we need to cause 1% of the new orders to be rolled back.
+        // if (TPCCUtil.randomNumber(1, 100, gen) == 1)
+        //     itemIDs[numItems - 1] = TPCCConfig.INVALID_ITEM_ID;
 
         int w_id = terminalWarehouseID;
         int d_id = districtID;
         int c_id = customerID;
         int o_ol_cnt = numItems;
         int o_all_local = allLocal;
-        float c_discount, w_tax, d_tax = 0, i_price;
+        double c_discount, w_tax, d_tax = 0, i_price;
 		int d_next_o_id, o_id = -1, s_quantity;
-		String c_last = null, c_credit = null, i_name, i_data, s_data;
+		String c_last = null, c_credit = null, i_name, i_data, String ;
 		String s_dist_01, s_dist_02, s_dist_03, s_dist_04, s_dist_05;
 		String s_dist_06, s_dist_07, s_dist_08, s_dist_09, s_dist_10, ol_dist_info = null;
-		float[] itemPrices = new float[o_ol_cnt];
-		float[] orderLineAmounts = new float[o_ol_cnt];
+		double[] itemPrices = new double[o_ol_cnt];
+		double[] orderLineAmounts = new double[o_ol_cnt];
 		String[] itemNames = new String[o_ol_cnt];
 		int[] stockQuantities = new int[o_ol_cnt];
 		char[] brandGeneric = new char[o_ol_cnt];
 		int ol_supply_w_id, ol_i_id, ol_quantity;
 		int s_remote_cnt_increment;
-		float ol_amount, total_amount = 0;
+		double ol_amount, total_amount = 0;
 		
         assert(remoteWarehouseId != terminalWarehouseID);
         String homeWarehouseDBType = TPCCLoader.getDBType(w_id);
@@ -206,8 +351,8 @@ public class XDSTPGNewOrderFunction extends XAFunction {
 			// stmtInsertOOrder.setInt(6, o_ol_cnt);
 			// stmtInsertOOrder.setInt(7, o_all_local);
 			// stmtInsertOOrder.executeUpdate();
-            context.executeUpdate(homeWarehouseDBType, stmtInsertOOrderSQL, 
-									o_id, d_id, w_id, c_id, TPCCLoader.getTimestamp(System.currentTimeMillis()),
+            context.executeUpdate(stmtInsertOOrderSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_OPENORDER, w_id, d_id, o_id),
+								 	o_id, d_id, w_id, c_id, TPCCLoader.getTimestamp(System.currentTimeMillis()),
                                   o_ol_cnt, o_all_local);
 			//insert ooder first]]
 			/*TODO: add error checking */
@@ -216,7 +361,7 @@ public class XDSTPGNewOrderFunction extends XAFunction {
 			// stmtInsertNewOrder.setInt(2, d_id);
 			// stmtInsertNewOrder.setInt(3, w_id);
 			// stmtInsertNewOrder.executeUpdate();
-            context.executeUpdate(homeWarehouseDBType, stmtInsertNewOrderSQL, o_id, d_id, w_id);
+            context.executeUpdate(stmtInsertNewOrderSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_NEWORDER, w_id, d_id, o_id), o_id, d_id, w_id);
 			/*TODO: add error checking */
 
 
@@ -236,120 +381,22 @@ public class XDSTPGNewOrderFunction extends XAFunction {
 				ol_supply_w_id = supplierWarehouseIDs[ol_number - 1];
 				ol_i_id = itemIDs[ol_number - 1];
 				ol_quantity = orderQuantities[ol_number - 1];
-                String supplyWarehouseDBType = TPCCLoader.getDBType(ol_supply_w_id);
-				// stmtGetItem.setInt(1, ol_i_id);
-				// rs = stmtGetItem.executeQuery();
-                rs = context.executeQuery(supplyWarehouseDBType, stmtGetItemSQL, ol_i_id);
-				if (!rs.next()) {
-					// This is (hopefully) an expected error: this is an
-					// expected new order rollback
-					assert ol_number == o_ol_cnt;
-					assert ol_i_id == TPCCConfig.INVALID_ITEM_ID;
-					rs.close();
-					throw new UserAbortException(
-							"EXPECTED new order rollback: I_ID=" + ol_i_id
-									+ " not found!");
-				}
-
-				i_price = rs.getFloat("I_PRICE");
-				i_name = rs.getString("I_NAME");
-				i_data = rs.getString("I_DATA");
-				rs.close();
-				rs = null;
-
+                
+				Map<String, Object> resMap = orderLineLogic(context, ol_supply_w_id, ol_i_id, ol_quantity, ol_number, o_ol_cnt, w_id, d_id);
+				i_price =((Double)resMap.get("i_price")).doubleValue();
+				i_name = (String)resMap.get("i_name");
+				i_data = (String)resMap.get("i_data");
+				
 				itemPrices[ol_number - 1] = i_price;
 				itemNames[ol_number - 1] = i_name;
-
-
-				// stmtGetStock.setInt(1, ol_i_id);
-				// stmtGetStock.setInt(2, ol_supply_w_id);
-				// rs = stmtGetStock.executeQuery();
-                rs = context.executeQuery(supplyWarehouseDBType, stmtGetStockSQL, ol_i_id, ol_supply_w_id);
-				if (!rs.next())
-					throw new RuntimeException("I_ID=" + ol_i_id
-							+ " not found!");
-				s_quantity = rs.getInt("S_QUANTITY");
-				s_data = rs.getString("S_DATA");
-				s_dist_01 = rs.getString("S_DIST_01");
-				s_dist_02 = rs.getString("S_DIST_02");
-				s_dist_03 = rs.getString("S_DIST_03");
-				s_dist_04 = rs.getString("S_DIST_04");
-				s_dist_05 = rs.getString("S_DIST_05");
-				s_dist_06 = rs.getString("S_DIST_06");
-				s_dist_07 = rs.getString("S_DIST_07");
-				s_dist_08 = rs.getString("S_DIST_08");
-				s_dist_09 = rs.getString("S_DIST_09");
-				s_dist_10 = rs.getString("S_DIST_10");
-				rs.close();
-				rs = null;
-
-				stockQuantities[ol_number - 1] = s_quantity;
-
-				if (s_quantity - ol_quantity >= 10) {
-					s_quantity -= ol_quantity;
-				} else {
-					s_quantity += -ol_quantity + 91;
-				}
-
-				if (ol_supply_w_id == w_id) {
-					s_remote_cnt_increment = 0;
-				} else {
-					s_remote_cnt_increment = 1;
-				}
-
-
-				// stmtUpdateStock.setInt(1, s_quantity);
-				// stmtUpdateStock.setInt(2, ol_quantity);
-				// stmtUpdateStock.setInt(3, s_remote_cnt_increment);
-				// stmtUpdateStock.setInt(4, ol_i_id);
-				// stmtUpdateStock.setInt(5, ol_supply_w_id);
-				// stmtUpdateStock.addBatch();
-                context.executeUpdate(supplyWarehouseDBType, stmtUpdateStockSQL, s_quantity, ol_quantity, s_remote_cnt_increment, ol_i_id, ol_supply_w_id);
-
-				ol_amount = ol_quantity * i_price;
+				
+				ol_amount = ((Double)resMap.get("ol_amount")).doubleValue();
 				orderLineAmounts[ol_number - 1] = ol_amount;
 				total_amount += ol_amount;
 
-				if (i_data.indexOf("ORIGINAL") != -1
-						&& s_data.indexOf("ORIGINAL") != -1) {
-					brandGeneric[ol_number - 1] = 'B';
-				} else {
-					brandGeneric[ol_number - 1] = 'G';
-				}
+				ol_dist_info = (String)resMap.get("ol_dist_info");
 
-				switch ((int) d_id) {
-				case 1:
-					ol_dist_info = s_dist_01;
-					break;
-				case 2:
-					ol_dist_info = s_dist_02;
-					break;
-				case 3:
-					ol_dist_info = s_dist_03;
-					break;
-				case 4:
-					ol_dist_info = s_dist_04;
-					break;
-				case 5:
-					ol_dist_info = s_dist_05;
-					break;
-				case 6:
-					ol_dist_info = s_dist_06;
-					break;
-				case 7:
-					ol_dist_info = s_dist_07;
-					break;
-				case 8:
-					ol_dist_info = s_dist_08;
-					break;
-				case 9:
-					ol_dist_info = s_dist_09;
-					break;
-				case 10:
-					ol_dist_info = s_dist_10;
-					break;
-				}
-
+				brandGeneric[ol_number - 1] = ((String)resMap.get("brandGeneric")).charAt(0);
 				// stmtInsertOrderLine.setInt(1, o_id);
 				// stmtInsertOrderLine.setInt(2, d_id);
 				// stmtInsertOrderLine.setInt(3, w_id);
@@ -360,7 +407,9 @@ public class XDSTPGNewOrderFunction extends XAFunction {
 				// stmtInsertOrderLine.setDouble(8, ol_amount);
 				// stmtInsertOrderLine.setString(9, ol_dist_info);
 				// stmtInsertOrderLine.addBatch();
-                context.executeUpdate(homeWarehouseDBType, stmtInsertOrderLineSQL, o_id, d_id, w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info);
+				
+                context.executeUpdate(stmtInsertOrderLineSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_ORDERLINE, w_id, d_id, o_id, ol_number),
+					o_id, d_id, w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info);
 
 			} // end-for
 

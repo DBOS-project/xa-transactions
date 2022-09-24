@@ -2,9 +2,11 @@ package org.dbos.apiary.benchmarks.tpcc;
 
 import org.dbos.apiary.benchmarks.tpcc.procedures.XANewOrderFunction;
 import org.dbos.apiary.benchmarks.tpcc.procedures.XAPaymentFunction;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLNewOrderPart;
 import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLPaymentGetCustomerByID;
 import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLPaymentGetCustomerByName;
 import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTMySQLPaymentPart;
+import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTNewOrderFunction;
 import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTPaymentFunction;
 import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.mysql.MysqlConnection;
@@ -142,6 +144,8 @@ public class TPCCBenchmark {
                 apiaryWorker.registerConnection(XAConfig.postgres, pconn);
                 apiaryWorker.registerConnection(XAConfig.mysql, mconn);
                 apiaryWorker.registerFunction("XDSTPaymentFunction", XAConfig.postgres, XDSTPaymentFunction::new);
+                apiaryWorker.registerFunction("XDSTNewOrderFunction", XAConfig.postgres, XDSTNewOrderFunction::new);
+                apiaryWorker.registerFunction("XDSTMySQLNewOrderPart", XAConfig.mysql, XDSTMySQLNewOrderPart::new);
                 apiaryWorker.registerFunction("XDSTMySQLPaymentPart", XAConfig.mysql, XDSTMySQLPaymentPart::new);
                 apiaryWorker.registerFunction("XDSTMySQLPaymentGetCustomerByID", XAConfig.mysql, XDSTMySQLPaymentGetCustomerByID::new);
                 apiaryWorker.registerFunction("XDSTMySQLPaymentGetCustomerByName", XAConfig.mysql, XDSTMySQLPaymentGetCustomerByName::new);
@@ -175,7 +179,7 @@ public class TPCCBenchmark {
                     if (transactionManager.equals("bitronix")) {
                         client.get().executeFunction("XANewOrderFunction", warehouseId, conf.getNumWarehouses()).getInt();
                     } else {
-                        client.get().executeFunction("XDSTPaymentFunction", warehouseId, conf.getNumWarehouses()).getInt();
+                        client.get().executeFunction("XDSTNewOrderFunction", warehouseId, conf.getNumWarehouses()).getInt();
                     }
                     if (warmed.get()) {
                         newOrderTimes.add(System.nanoTime() - t0);
