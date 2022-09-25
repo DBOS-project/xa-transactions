@@ -236,7 +236,6 @@ public class XDSTNewOrderFunction extends XAFunction {
     public static int runFunction(org.dbos.apiary.postgres.PostgresContext context, int terminalWarehouseID, int numWarehouses) throws Exception {
         int districtID = TPCCUtil.randomNumber(1,TPCCConfig.configDistPerWhse, gen);
         int customerID = TPCCUtil.getCustomerID(gen);
-
         int numItems = (int) TPCCUtil.randomNumber(5, 15, gen);
         int[] itemIDs = new int[numItems];
         int[] supplierWarehouseIDs = new int[numItems];
@@ -248,14 +247,13 @@ public class XDSTNewOrderFunction extends XAFunction {
             if (TPCCUtil.randomNumber(1, 100, gen) > 50) { // 50% from home warehouse
                 supplierWarehouseIDs[i] = terminalWarehouseID;
             } else {
-                do {
-                    supplierWarehouseIDs[i] = remoteWarehouseId == -1 ? TPCCUtil.randomNumber(1,
-                            numWarehouses, gen) : remoteWarehouseId;
-                    if (supplierWarehouseIDs[i] != terminalWarehouseID) {
-                        remoteWarehouseId = supplierWarehouseIDs[i];
-                    }
-                } while (supplierWarehouseIDs[i] == terminalWarehouseID
-                        && numWarehouses > 1);
+				if (remoteWarehouseId == -1) {
+					remoteWarehouseId = TPCCUtil.randomNumber(1, numWarehouses, gen);
+					while (TPCCLoader.getDBType(remoteWarehouseId).equals(TPCCConstants.DBTYPE_POSTGRES)) {
+						remoteWarehouseId = TPCCUtil.randomNumber(1, numWarehouses, gen);
+					}
+				}
+				supplierWarehouseIDs[i] = remoteWarehouseId;
                 allLocal = 0;
             }
             orderQuantities[i] = TPCCUtil.randomNumber(1, 10, gen);

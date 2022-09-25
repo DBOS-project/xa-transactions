@@ -44,7 +44,8 @@ CREATE TABLE CUSTOMER (
   C_DATA VARCHAR(500) NOT NULL,
   -- PRIMARY KEY (C_W_ID,C_D_ID,C_ID),
   KEY(__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 
@@ -65,7 +66,8 @@ CREATE TABLE DISTRICT (
   D_ZIP CHAR(9) NOT NULL,
   -- PRIMARY KEY (D_W_ID,D_ID)
   KEY(__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 -- TODO: H_DATE ON UPDATE CURRENT_TIMESTAMP
@@ -83,7 +85,8 @@ CREATE TABLE HISTORY (
   H_AMOUNT DECIMAL(6,2) NOT NULL,
   H_DATA VARCHAR(24) NOT NULL,
   KEY(__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 
@@ -98,7 +101,8 @@ CREATE TABLE ITEM (
   I_IM_ID INT NOT NULL,
   -- PRIMARY KEY (I_ID)
   KEY(__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 
@@ -111,7 +115,8 @@ CREATE TABLE NEW_ORDER (
   NO_O_ID INT NOT NULL,
   -- PRIMARY KEY (NO_W_ID,NO_D_ID,NO_O_ID)
   KEY(__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 -- TODO: O_ENTRY_D  ON UPDATE CURRENT_TIMESTAMP
@@ -131,7 +136,8 @@ CREATE TABLE OORDER (
   -- PRIMARY KEY (O_W_ID,O_D_ID,O_ID),
   UNIQUE (O_W_ID,O_D_ID,O_C_ID,O_ID),
   KEY (__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 
@@ -151,7 +157,8 @@ CREATE TABLE ORDER_LINE (
   OL_DIST_INFO CHAR(24) NOT NULL,
   -- PRIMARY KEY (OL_W_ID,OL_D_ID,OL_O_ID,OL_NUMBER)
   KEY (__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 CREATE TABLE STOCK (
@@ -177,7 +184,8 @@ CREATE TABLE STOCK (
   S_DIST_10 CHAR(24) NOT NULL,
   -- PRIMARY KEY (S_W_ID,S_I_ID)
   KEY (__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 CREATE TABLE WAREHOUSE (
@@ -195,7 +203,8 @@ CREATE TABLE WAREHOUSE (
   W_ZIP CHAR(9) NOT NULL,
   -- PRIMARY KEY (W_ID)
   KEY (__apiaryID__),
-  KEY(__endVersion__)
+  KEY(__endVersion__),
+  KEY(__beginVersion__)
 );
 
 -- INDEXES

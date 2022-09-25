@@ -42,8 +42,8 @@ import java.util.stream.Collectors;
 
 public class TPCCBenchmark {
     private static final Logger logger = LoggerFactory.getLogger(TPCCBenchmark.class);
-    private static final int numWorkerThreads = 5;
-    private static final int threadPoolSize = 5;
+    private static final int numWorkerThreads = 8;
+    private static final int threadPoolSize = 8;
     private static final int threadWarmupMs = 5000;  // First 5 seconds of requests would be warm-up and not recorded.
 
     private static String[] DBTypes = {XAConnection.MySQLDBType, XAConnection.PostgresDBType};
@@ -98,34 +98,49 @@ public class TPCCBenchmark {
         return ds;
     }
 
-    public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder) throws SQLException, InterruptedException {
+    public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder, boolean mysqlDelayLogFlush, boolean skipLoading, boolean skipBench) throws SQLException, InterruptedException {
         XAConnection conn = null;
         
         if (transactionManager.equals("bitronix")) {
             BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
             BitronixXADBConnection postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
             conn = new BitronixXAConnection(postgresConn, mysqlConn);
-            TPCCLoader loader = new TPCCLoader(conf, postgresConn, mysqlConn);
-            List<LoaderThread> loaders = loader.createLoaderThreads();
-            ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
+            if (!skipLoading) {
+                TPCCLoader loader = new TPCCLoader(conf, postgresConn, mysqlConn);
+                List<LoaderThread> loaders = loader.createLoaderThreads();
+                ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
+            }
         } else if (transactionManager.equals("XDST")) {
-            TPCCLoaderXDST loader = new TPCCLoaderXDST(conf, 
+            if (!skipLoading) {
+                TPCCLoaderXDST loader = new TPCCLoaderXDST(conf, 
                 getPostgresDataSource(conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos"),
                 getMySQLDataSource(conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos"));
-            List<LoaderThread> loaders = loader.createLoaderThreads();
-            ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
+                List<LoaderThread> loaders = loader.createLoaderThreads();
+                ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
+            }
         } else {
             throw new RuntimeException("Unknown transaction manager " + transactionManager);
         }
 
+        if (skipLoading) {
+            logger.info("TPCC data loading skipped");
+        } else {
+            logger.info("TPCC data loading finished");
+        }
         
-        logger.info("TPCC data loading finished");
+        if (skipBench) {
+            logger.info("TPCC benchmark skipped");
+            return;
+        }
 
         MysqlConnection mconn;
         PostgresConnection pconn;
         try {
             mconn = new MysqlConnection(conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
             pconn = new PostgresConnection(conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
+            if (mysqlDelayLogFlush) {
+                mconn.enableDelayedFlush();
+            }
         } catch (Exception e) {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
             return;
@@ -262,6 +277,11 @@ public class TPCCBenchmark {
         threadPool.shutdown();
         threadPool.awaitTermination(10000, TimeUnit.SECONDS);
         logger.info("All queries finished! {}", System.currentTimeMillis() - startTime);
+        logger.info("MySQL upsert stats: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", mconn.upserts.size(), mconn.upserts.average(), mconn.upserts.nth(50), mconn.upserts.nth(75), mconn.upserts.nth(90), mconn.upserts.nth(95), mconn.upserts.nth(99));
+
+        logger.info("MySQL query stats: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", mconn.queries.size(), mconn.queries.average(), mconn.queries.nth(50), mconn.queries.nth(75), mconn.queries.nth(90),mconn.queries.nth(95), mconn.queries.nth(99));
+
+        logger.info("MySQL commit stats: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", mconn.commits.size(), mconn.commits.average(), mconn.commits.nth(50), mconn.commits.nth(75), mconn.commits.nth(90), mconn.commits.nth(95), mconn.commits.nth(99));
 
         if (apiaryWorker != null) {
             apiaryWorker.shutdown();

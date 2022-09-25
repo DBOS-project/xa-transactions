@@ -14,7 +14,7 @@
  *  limitations under the License.                                            *
  ******************************************************************************/
 
-package org.dbos.apiary.benchmarks.tpcc.procedures;
+package org.dbos.apiary.benchmarks.tpcc.procedures; 
 
 import java.sql.ResultSet;
 import java.util.Random;
@@ -103,14 +103,13 @@ public class XANewOrderFunction extends XAFunction {
             if (TPCCUtil.randomNumber(1, 100, gen) > 50) { // 50% from home warehouse
                 supplierWarehouseIDs[i] = terminalWarehouseID;
             } else {
-                do {
-                    supplierWarehouseIDs[i] = remoteWarehouseId == -1 ? TPCCUtil.randomNumber(1,
-                            numWarehouses, gen) : remoteWarehouseId;
-                    if (supplierWarehouseIDs[i] != terminalWarehouseID) {
-                        remoteWarehouseId = supplierWarehouseIDs[i];
-                    }
-                } while (supplierWarehouseIDs[i] == terminalWarehouseID
-                        && numWarehouses > 1);
+				if (remoteWarehouseId == -1) {
+					remoteWarehouseId = TPCCUtil.randomNumber(1, numWarehouses, gen);
+					while (TPCCLoader.getDBType(supplierWarehouseIDs[i]).equals(TPCCConstants.DBTYPE_POSTGRES)) {
+						remoteWarehouseId = TPCCUtil.randomNumber(1, numWarehouses, gen);
+					}
+				}
+				supplierWarehouseIDs[i] = remoteWarehouseId;
                 allLocal = 0;
             }
             orderQuantities[i] = TPCCUtil.randomNumber(1, 10, gen);

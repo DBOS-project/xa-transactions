@@ -23,7 +23,9 @@ public class BenchmarkingExecutable {
         options.addOption("s", true, "Scale factor (Default: 1)");
         options.addOption("l", true, "Number of loader threads (Default: half of the available processors)");
         options.addOption("p", true, "Percentage of New-Order transactions (Default 50)");
-
+        options.addOption("df", false, "Delay log flushes till the end of validation in MySQL");
+        options.addOption("skipLoading", false, "Skip data loading");
+        options.addOption("skipBench", false, "Skip benchmark");
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
 
@@ -62,6 +64,18 @@ public class BenchmarkingExecutable {
         conf.setDBName("tpcc");
         conf.setDBAddressMySQL(mysqlAddr);
         conf.setDBAddressPG(postgresAddr);
+        boolean mysqlDelayLogFlush = false;
+        boolean skipLoading = false;
+        boolean skipBench = false;
+        if (cmd.hasOption("df")) {
+            mysqlDelayLogFlush = true;
+        }
+        if (cmd.hasOption("skipLoading")) {
+            skipLoading = true;
+        }
+        if (cmd.hasOption("skipBench")) {
+            skipBench = true;
+        }
         if (cmd.hasOption("s")) {
             double scaleFactor = Double.parseDouble(cmd.getOptionValue("s"));
             conf.setScaleFactor(scaleFactor);
@@ -72,7 +86,7 @@ public class BenchmarkingExecutable {
             int warehouses = Integer.parseInt(cmd.getOptionValue("s"));
             conf.setNumWarehouses(warehouses);
         } else {
-            conf.setNumWarehouses(5);
+            conf.setNumWarehouses(20);
         }
         if (cmd.hasOption("l")) {
             conf.setLoaderThreads(Integer.parseInt(cmd.getOptionValue("l")));
@@ -87,11 +101,11 @@ public class BenchmarkingExecutable {
     
         logger.info("Running TPCC benchmark using transaction manager {}.", transactionManager);
         int percentageNewOrder = 50;
-        if (cmd.hasOption("p1")) {
-            percentageNewOrder = Integer.parseInt(cmd.getOptionValue("p1"));
+        if (cmd.hasOption("p")) {
+            percentageNewOrder = Integer.parseInt(cmd.getOptionValue("p"));
         }
         logger.info("TPCC benchmark neworder percentage: {}%", percentageNewOrder);
         logger.info("TPCC benchmark against postgres@{}, mysql@{}", postgresAddr, mysqlAddr);
-        TPCCBenchmark.benchmark(conf, transactionManager, mainHostAddr, interval, duration, percentageNewOrder);
+        TPCCBenchmark.benchmark(conf, transactionManager, mainHostAddr, interval, duration, percentageNewOrder, mysqlDelayLogFlush, skipLoading, skipBench);
     }
 }
