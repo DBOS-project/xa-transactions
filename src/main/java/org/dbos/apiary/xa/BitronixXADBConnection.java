@@ -21,6 +21,7 @@ public class BitronixXADBConnection extends BaseXAConnection  {
     private final ThreadLocal<Connection> connection;
     //private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
     private static final int kIsolationLevel = Connection.TRANSACTION_REPEATABLE_READ;
+
     public void close() {
         ds.close();
     }

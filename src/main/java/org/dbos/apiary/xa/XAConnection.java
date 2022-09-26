@@ -149,5 +149,6 @@ public class XAConnection implements ApiaryConnection {
     public TransactionContext getLatestTransactionContext() {
         // TODO Auto-generated method stub
         return null;
+
     }
 }

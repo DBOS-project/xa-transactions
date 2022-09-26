@@ -78,7 +78,6 @@ public class XABankBenchmark {
             throw new RuntimeException("Unknown transaction manager " + transactionManager);
         }
 
-
         MysqlConnection mconn;
         PostgresConnection pconn;
         try {
@@ -88,6 +87,7 @@ public class XABankBenchmark {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
             return;
         }
+
 
         ApiaryWorker apiaryWorker = null;
         if (mainHostAddr.equalsIgnoreCase("localhost")) {

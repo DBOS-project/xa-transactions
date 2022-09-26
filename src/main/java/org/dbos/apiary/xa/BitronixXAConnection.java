@@ -1,6 +1,7 @@
 package org.dbos.apiary.xa;
 
 import org.dbos.apiary.benchmarks.tpcc.UserAbortException;
+
 import org.dbos.apiary.connection.ApiaryConnection;
 import org.dbos.apiary.function.FunctionOutput;
 import org.dbos.apiary.function.TransactionContext;
@@ -99,6 +100,7 @@ public class BitronixXAConnection extends XAConnection {
                     continue;
                 }
                 logger.info("Unrecoverable error in function execution: {}", e.toString());
+
                 e.printStackTrace();
                 break;
             }
