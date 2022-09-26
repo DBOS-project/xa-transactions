@@ -51,7 +51,7 @@ public class BitronixXAConnection extends XAConnection {
     }
 
     @Override
-    public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, Object... inputs) throws Exception {
+    public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, boolean isReplay, Object... inputs) throws Exception {
         FunctionOutput f = null;
 
 

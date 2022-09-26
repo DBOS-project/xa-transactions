@@ -15,7 +15,7 @@ public class XAContext extends ApiaryContext {
     private static final Logger logger = LoggerFactory.getLogger(XAContext.class);
     private XAConnection xaConn;
     public XAContext(XAConnection xaConn, WorkerContext workerContext, String service, long execID, long functionID) {
-        super(workerContext, service, execID, functionID);
+        super(workerContext, service, execID, functionID, false);
         this.xaConn = xaConn;
     }
 
