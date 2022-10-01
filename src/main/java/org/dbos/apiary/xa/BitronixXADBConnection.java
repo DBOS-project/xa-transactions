@@ -1,5 +1,6 @@
 package org.dbos.apiary.xa;
 
+import org.dbos.apiary.utilities.Percentile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,11 +17,14 @@ import java.sql.Connection;
 public class BitronixXADBConnection extends BaseXAConnection  {
     private static final Logger logger = LoggerFactory.getLogger(BitronixXADBConnection.class);
 
+    public Percentile updates = new Percentile();
+    public Percentile queries = new Percentile();
     private PoolingDataSource ds;
     //private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
-    private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
-    //private static final int kIsolationLevel = Connection.TRANSACTION_REPEATABLE_READ;
+    //private static final int kIsolationLevel = Connection.TRANSACTION_SERIALIZABLE;
+    private static final int kIsolationLevel = Connection.TRANSACTION_REPEATABLE_READ;
+
     public void close() {
         ds.close();
     }
@@ -84,8 +88,9 @@ public class BitronixXADBConnection extends BaseXAConnection  {
             Connection testConn = ds.getConnection();
             testConn.close();
         } catch (SQLException e) {
-            logger.info("Failed to connect to Postgres");
-            throw new RuntimeException("Failed to connect to Postgres");
+            e.printStackTrace();
+            logger.info("Failed to connect to database ");
+            throw new RuntimeException("Failed to connect to database");
         }
     }
 
@@ -105,5 +110,16 @@ public class BitronixXADBConnection extends BaseXAConnection  {
     @Override
     public Connection getConnection() throws SQLException {
         return connection.get();
+    }
+
+    @Override
+    public void addUpdateTime(long time) {
+        updates.add(time);
+        
+    }
+
+    @Override
+    public void addQueryTime(long time) {
+        queries.add(time);
     }
 }

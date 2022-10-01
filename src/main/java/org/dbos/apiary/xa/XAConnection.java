@@ -4,6 +4,7 @@ import org.dbos.apiary.connection.ApiaryConnection;
 import org.dbos.apiary.function.FunctionOutput;
 import org.dbos.apiary.function.TransactionContext;
 import org.dbos.apiary.function.WorkerContext;
+import org.dbos.apiary.utilities.Percentile;
 import org.postgresql.util.PSQLException;
 import org.postgresql.util.PSQLState;
 import org.slf4j.Logger;
@@ -23,6 +24,7 @@ public class XAConnection implements ApiaryConnection {
     private static final Logger logger = LoggerFactory.getLogger(XAConnection.class);
     public static String PostgresDBType = "Postgres";
     public static String MySQLDBType = "MySQL";
+    public static Percentile funcCalls = new Percentile();
     XADBConnection postgresConnection;
     XADBConnection mysqlConnection;
     
@@ -53,7 +55,8 @@ public class XAConnection implements ApiaryConnection {
     }
 
     @Override
-    public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, Object... inputs) throws Exception {
+    public FunctionOutput callFunction(String functionName, WorkerContext workerContext, String service, long execID, long functionID, boolean isReplay, Object... inputs) throws Exception {
+        long t0 = System.nanoTime();
         FunctionOutput f = null;
         while(true) {
             XAContext ctxt = new XAContext(this, workerContext, service, execID, functionID);
@@ -111,7 +114,7 @@ public class XAConnection implements ApiaryConnection {
                 rollback(xid, ended);
             }
         }
-
+        funcCalls.add((System.nanoTime() - t0)/1000);
         return f;
     }
 
@@ -143,5 +146,12 @@ public class XAConnection implements ApiaryConnection {
         Map<Integer, String> myMap = new TreeMap<Integer, String>();
         myMap.put(0, "localhost");
         return myMap;
+    }
+
+    @Override
+    public TransactionContext getLatestTransactionContext() {
+        // TODO Auto-generated method stub
+        return null;
+
     }
 }

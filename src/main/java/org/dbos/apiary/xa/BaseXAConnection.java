@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.sql.Statement;
+import java.sql.Timestamp;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 
@@ -16,7 +17,8 @@ public abstract class BaseXAConnection implements XADBConnection {
     public abstract javax.transaction.xa.XAResource getXAResource() throws SQLException;
     public abstract java.sql.Connection getNewConnection() throws SQLException;
     public abstract java.sql.Connection getConnection() throws SQLException;
-    
+    public abstract void addUpdateTime(long time);
+    public abstract void addQueryTime(long time);
     public void close() {
 
     }
@@ -126,7 +128,15 @@ public abstract class BaseXAConnection implements XADBConnection {
                 ps.setInt(i + 1, (Integer) o);
             } else if (o instanceof String) {
                 ps.setString(i + 1, (String) o);
-            } else {
+            } else if (o instanceof Timestamp) {
+                ps.setTimestamp(i + 1, (Timestamp) o);
+            } else if (o instanceof Double) {
+                ps.setDouble(i + 1, (Double) o);
+            } else if (o instanceof Float) {
+                ps.setFloat(i + 1, (Float) o);
+            } else if (o instanceof Long) {
+                ps.setLong(i + 1, (Long) o);
+            }  else {
                 assert (false); // TODO: More types.
             }
         }
@@ -137,12 +147,16 @@ public abstract class BaseXAConnection implements XADBConnection {
      * @param procedure a SQL DML statement (e.g., INSERT, UPDATE, DELETE).
      * @param input     input parameters for the SQL statement.
      */
-    public void executeUpdate(String procedure, Object... input) throws SQLException {
+    public int executeUpdate(String procedure, Object... input) throws SQLException {
         // First, prepare statement. Then, execute.
+        long t0 = System.nanoTime();
         Connection c = getConnection();
         PreparedStatement pstmt = c.prepareStatement(procedure);
         prepareStatement(pstmt, input);
-        pstmt.executeUpdate();
+        int res = pstmt.executeUpdate();
+        long time = System.nanoTime() - t0;
+        addUpdateTime(time / 1000);
+        return res;
     }
 
     /**
@@ -151,10 +165,13 @@ public abstract class BaseXAConnection implements XADBConnection {
      * @param input     input parameters for the SQL statement.
      */
     public ResultSet executeQuery(String procedure, Object... input) throws SQLException {
+        long t0 = System.nanoTime();
         Connection c = getConnection();
         PreparedStatement pstmt = c.prepareStatement(procedure, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
         prepareStatement(pstmt, input);
         ResultSet rs = pstmt.executeQuery();
+        long time = System.nanoTime() - t0;
+        addQueryTime(time / 1000);
         return rs;
     }
 }

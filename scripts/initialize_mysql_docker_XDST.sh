@@ -16,4 +16,4 @@ sleep 30
 # Create DBOS database.
 mysql -h $MYSQL_HOST -uroot -pdbos -P3306 -t < init_mysql.sql
 # Create TPCC database.
-mysql -h $MYSQL_HOST -uroot -pdbos -P3306 -t < tpcc-mysql-ddl.sql
+mysql -h $MYSQL_HOST -uroot -pdbos -P3306 -t < tpcc-mysql-ddl-xdbt.sql

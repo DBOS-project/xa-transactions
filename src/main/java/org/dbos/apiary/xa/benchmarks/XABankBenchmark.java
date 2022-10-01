@@ -1,6 +1,9 @@
 package org.dbos.apiary.xa.benchmarks;
 
 import org.dbos.apiary.client.ApiaryWorkerClient;
+import org.dbos.apiary.mysql.MysqlConnection;
+import org.dbos.apiary.postgres.PostgresConnection;
+import org.dbos.apiary.procedures.mysql.MysqlUpsertPerson;
 import org.dbos.apiary.utilities.ApiaryConfig;
 import org.dbos.apiary.worker.ApiaryNaiveScheduler;
 import org.dbos.apiary.worker.ApiaryWorker;
@@ -13,6 +16,8 @@ import org.dbos.apiary.xa.XAConnection;
 import org.dbos.apiary.xa.procedures.BankAudit;
 import org.dbos.apiary.xa.procedures.BankTransfer;
 import org.dbos.apiary.xa.procedures.GetApiaryClientID;
+import org.dbos.apiary.xa.procedures.xdbshim.MySQLBankTransfer;
+import org.dbos.apiary.xa.procedures.xdbshim.PGBankTransfer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -73,12 +78,27 @@ public class XABankBenchmark {
             throw new RuntimeException("Unknown transaction manager " + transactionManager);
         }
 
+        MysqlConnection mconn;
+        PostgresConnection pconn;
+        try {
+            mconn = new MysqlConnection(mysqlAddr, XAConfig.mysqlPort, "dbos", "root", "dbos");
+            pconn = new PostgresConnection(postgresAddr, XAConfig.postgresPort, "dbos", "postgres", "dbos");
+        } catch (Exception e) {
+            logger.info("No MySQL/Postgres instance! {}", e.getMessage());
+            return;
+        }
+
 
         ApiaryWorker apiaryWorker = null;
         if (mainHostAddr.equalsIgnoreCase("localhost")) {
             // Start a worker in this process. Otherwise, the worker itself could be remote.
             apiaryWorker = new ApiaryWorker(new ApiaryNaiveScheduler(), numWorkerThreads);
             apiaryWorker.registerConnection(XAConfig.XA, conn);
+            apiaryWorker.registerConnection(XAConfig.mysql, mconn);
+            apiaryWorker.registerConnection(XAConfig.postgres, pconn);
+            apiaryWorker.registerFunction("PGBankTransfer", XAConfig.postgres, PGBankTransfer::new);
+            apiaryWorker.registerFunction("MySQLBankTransfer", XAConfig.mysql, MySQLBankTransfer::new);
+            apiaryWorker.registerFunction("MySQLQueryBalance", ApiaryConfig.mysql, MysqlUpsertPerson::new);
             apiaryWorker.registerFunction(ApiaryConfig.getApiaryClientID, XAConfig.XA, GetApiaryClientID::new);
             apiaryWorker.registerFunction("BankAudit", XAConfig.XA, BankAudit::new);
             apiaryWorker.registerFunction("BankTransfer", XAConfig.XA, BankTransfer::new);

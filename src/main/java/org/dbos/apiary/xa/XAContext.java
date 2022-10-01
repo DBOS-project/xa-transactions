@@ -15,13 +15,13 @@ public class XAContext extends ApiaryContext {
     private static final Logger logger = LoggerFactory.getLogger(XAContext.class);
     private XAConnection xaConn;
     public XAContext(XAConnection xaConn, WorkerContext workerContext, String service, long execID, long functionID) {
-        super(workerContext, service, execID, functionID);
+        super(workerContext, service, execID, functionID, false);
         this.xaConn = xaConn;
     }
 
-    public void executeUpdate(String DBType, String procedure, Object... input) throws SQLException {
+    public int executeUpdate(String DBType, String procedure, Object... input) throws SQLException {
         // TODO: implement executing updates here.
-        xaConn.getXAConnection(DBType).executeUpdate(procedure, input);
+        return xaConn.getXAConnection(DBType).executeUpdate(procedure, input);
     }
 
     public void recordExecution(org.dbos.apiary.function.FunctionOutput arg0) {}
