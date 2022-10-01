@@ -41,7 +41,7 @@ public class XDSTMySQLNewOrderPart extends XAFunction {
 
     public static final String  stmtGetStockSQL = 
         "SELECT * FROM " + TPCCConstants.TABLENAME_STOCK + 
-        " WHERE __apiaryid__ = ?";
+        " WHERE __apiaryid__ = ? and S_W_ID = ?";
 
     public static final String  stmtUpdateStockSQL = 
         "UPDATE " + TPCCConstants.TABLENAME_STOCK + 
@@ -49,7 +49,7 @@ public class XDSTMySQLNewOrderPart extends XAFunction {
         "       S_YTD = S_YTD + ?, " + 
         "       S_ORDER_CNT = S_ORDER_CNT + 1, " +
         "       S_REMOTE_CNT = S_REMOTE_CNT + ? " +
-        " WHERE __apiaryid__ = ? ";
+        " WHERE __apiaryid__ = ? and S_W_ID = ? ";
 
     public String runFunction(org.dbos.apiary.mysql.MysqlContext context, int ol_supply_w_id, int ol_i_id, int ol_quantity, int ol_number, int o_ol_cnt, int w_id, int d_id) throws Exception {
 		Map<String, Object> resMap = new HashMap<>();
@@ -83,9 +83,9 @@ public class XDSTMySQLNewOrderPart extends XAFunction {
 		// stmtGetStock.setInt(1, ol_i_id);
 		// stmtGetStock.setInt(2, ol_supply_w_id);
 		// rs = stmtGetStock.executeQuery();
-		rs = context.executeQuery(stmtGetStockSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, ol_supply_w_id, ol_i_id));
+		rs = context.executeQuery(stmtGetStockSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, ol_supply_w_id, ol_i_id), ol_supply_w_id);
 		if (!rs.next())
-			throw new RuntimeException("I_ID=" + ol_i_id
+			throw new RuntimeException("ID=" + TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, ol_supply_w_id, ol_i_id)
 					+ " not found!");
 		
 		int s_w_id = rs.getInt("S_W_ID");

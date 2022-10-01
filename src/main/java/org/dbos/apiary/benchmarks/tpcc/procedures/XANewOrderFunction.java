@@ -20,8 +20,11 @@ import java.sql.ResultSet;
 import java.util.Random;
 
 import org.apache.log4j.Logger;
-
-import org.dbos.apiary.benchmarks.tpcc.*;
+import org.dbos.apiary.benchmarks.tpcc.TPCCConfig;
+import org.dbos.apiary.benchmarks.tpcc.TPCCConstants;
+import org.dbos.apiary.benchmarks.tpcc.TPCCLoader;
+import org.dbos.apiary.benchmarks.tpcc.TPCCUtil;
+import org.dbos.apiary.benchmarks.tpcc.UserAbortException;
 import org.dbos.apiary.xa.XAContext;
 import org.dbos.apiary.xa.XAFunction;
 
@@ -48,8 +51,8 @@ public class XANewOrderFunction extends XAFunction {
 
     public static final String stmtInsertNewOrderSQL = 
         "INSERT INTO " + TPCCConstants.TABLENAME_NEWORDER +
-        " (NO_O_ID, NO_D_ID, NO_W_ID) " +
-        " VALUES ( ?, ?, ?)";
+        " (__apiaryid__,NO_O_ID, NO_D_ID, NO_W_ID) " +
+        " VALUES (?, ?, ?, ?)";
 
     public static final String  stmtUpdateDistSQL = 
         "UPDATE " + TPCCConstants.TABLENAME_DISTRICT + 
@@ -59,8 +62,8 @@ public class XANewOrderFunction extends XAFunction {
 
     public static final String  stmtInsertOOrderSQL = 
         "INSERT INTO " + TPCCConstants.TABLENAME_OPENORDER + 
-        " (O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)" + 
-        " VALUES (?, ?, ?, ?, ?, ?, ?)";
+        " (__apiaryid__,O_ID, O_D_ID, O_W_ID, O_C_ID, O_ENTRY_D, O_OL_CNT, O_ALL_LOCAL)" + 
+        " VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
 
     public static final String  stmtGetItemSQL = 
         "SELECT I_PRICE, I_NAME , I_DATA " +
@@ -85,8 +88,8 @@ public class XANewOrderFunction extends XAFunction {
 
     public static final String  stmtInsertOrderLineSQL = 
     "INSERT INTO " + TPCCConstants.TABLENAME_ORDERLINE + 
-    " (OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER, OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DIST_INFO) " +
-    " VALUES (?,?,?,?,?,?,?,?,?)";
+    " (__apiaryid__,OL_O_ID, OL_D_ID, OL_W_ID, OL_NUMBER, OL_I_ID, OL_SUPPLY_W_ID, OL_QUANTITY, OL_AMOUNT, OL_DIST_INFO) " +
+    " VALUES (?,?,?,?,?,?,?,?,?,?)";
 
     public static int runFunction(XAContext context, int terminalWarehouseID, int numWarehouses) throws Exception {
         int districtID = TPCCUtil.randomNumber(1,TPCCConfig.configDistPerWhse, gen);
@@ -116,8 +119,8 @@ public class XANewOrderFunction extends XAFunction {
         }
 
         // we need to cause 1% of the new orders to be rolled back.
-        if (TPCCUtil.randomNumber(1, 100, gen) == 1)
-            itemIDs[numItems - 1] = TPCCConfig.INVALID_ITEM_ID;
+        // if (TPCCUtil.randomNumber(1, 100, gen) == 1)
+        //     itemIDs[numItems - 1] = TPCCConfig.INVALID_ITEM_ID;
 
         int w_id = terminalWarehouseID;
         int d_id = districtID;
@@ -202,7 +205,7 @@ public class XANewOrderFunction extends XAFunction {
 			// stmtInsertOOrder.setInt(6, o_ol_cnt);
 			// stmtInsertOOrder.setInt(7, o_all_local);
 			// stmtInsertOOrder.executeUpdate();
-            context.executeUpdate(homeWarehouseDBType, stmtInsertOOrderSQL, 
+            context.executeUpdate(homeWarehouseDBType, stmtInsertOOrderSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_OPENORDER, w_id, d_id, o_id),
 									o_id, d_id, w_id, c_id, TPCCLoader.getTimestamp(System.currentTimeMillis()),
                                   o_ol_cnt, o_all_local);
 			//insert ooder first]]
@@ -212,7 +215,7 @@ public class XANewOrderFunction extends XAFunction {
 			// stmtInsertNewOrder.setInt(2, d_id);
 			// stmtInsertNewOrder.setInt(3, w_id);
 			// stmtInsertNewOrder.executeUpdate();
-            context.executeUpdate(homeWarehouseDBType, stmtInsertNewOrderSQL, o_id, d_id, w_id);
+            context.executeUpdate(homeWarehouseDBType, stmtInsertNewOrderSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_NEWORDER, w_id, d_id, o_id), o_id, d_id, w_id);
 			/*TODO: add error checking */
 
 
@@ -356,7 +359,8 @@ public class XANewOrderFunction extends XAFunction {
 				// stmtInsertOrderLine.setDouble(8, ol_amount);
 				// stmtInsertOrderLine.setString(9, ol_dist_info);
 				// stmtInsertOrderLine.addBatch();
-                context.executeUpdate(homeWarehouseDBType, stmtInsertOrderLineSQL, o_id, d_id, w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info);
+                context.executeUpdate(homeWarehouseDBType, stmtInsertOrderLineSQL,  TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_ORDERLINE, w_id, d_id, o_id, ol_number),
+					o_id, d_id, w_id, ol_number, ol_i_id, ol_supply_w_id, ol_quantity, ol_amount, ol_dist_info);
 
 			} // end-for
 

@@ -1,6 +1,7 @@
 -- TODO: c_since ON UPDATE CURRENT_TIMESTAMP,
 DROP TABLE IF EXISTS order_line;
 CREATE TABLE order_line (
+  __apiaryid__ VARCHAR(40) NOT NULL,
   ol_w_id int NOT NULL,
   ol_d_id int NOT NULL,
   ol_o_id int NOT NULL,
@@ -16,6 +17,7 @@ CREATE TABLE order_line (
 
 DROP TABLE IF EXISTS new_order;
 CREATE TABLE new_order (
+  __apiaryid__ VARCHAR(30) NOT NULL,
   no_w_id int NOT NULL,
   no_d_id int NOT NULL,
   no_o_id int NOT NULL,
@@ -24,6 +26,7 @@ CREATE TABLE new_order (
 
 DROP TABLE IF EXISTS stock;
 CREATE TABLE stock (
+  __apiaryid__ VARCHAR(20) NOT NULL,
   s_w_id int NOT NULL,
   s_i_id int NOT NULL,
   s_quantity decimal(4,0) NOT NULL,
@@ -47,6 +50,7 @@ CREATE TABLE stock (
 -- TODO: o_entry_d  ON UPDATE CURRENT_TIMESTAMP
 DROP TABLE IF EXISTS oorder;
 CREATE TABLE oorder (
+  __apiaryid__ VARCHAR(30) NOT NULL,
   o_w_id int NOT NULL,
   o_d_id int NOT NULL,
   o_id int NOT NULL,
@@ -62,6 +66,7 @@ CREATE TABLE oorder (
 -- TODO: h_date ON UPDATE CURRENT_TIMESTAMP
 DROP TABLE IF EXISTS history;
 CREATE TABLE history (
+  __apiaryid__ VARCHAR(50) NOT NULL,
   h_c_id int NOT NULL,
   h_c_d_id int NOT NULL,
   h_c_w_id int NOT NULL,
@@ -74,6 +79,7 @@ CREATE TABLE history (
 
 DROP TABLE IF EXISTS customer;
 CREATE TABLE customer (
+  __apiaryid__ VARCHAR(30) NOT NULL,
   c_w_id int NOT NULL,
   c_d_id int NOT NULL,
   c_id int NOT NULL,
@@ -100,6 +106,7 @@ CREATE TABLE customer (
 
 DROP TABLE IF EXISTS district;
 CREATE TABLE district (
+  __apiaryid__ VARCHAR(20) NOT NULL,
   d_w_id int NOT NULL,
   d_id int NOT NULL,
   d_ytd decimal(12,2) NOT NULL,
@@ -117,6 +124,7 @@ CREATE TABLE district (
 
 DROP TABLE IF EXISTS item;
 CREATE TABLE item (
+  __apiaryid__ VARCHAR(10) NOT NULL,
   i_id int NOT NULL,
   i_name varchar(24) NOT NULL,
   i_price decimal(5,2) NOT NULL,
@@ -127,6 +135,7 @@ CREATE TABLE item (
 
 DROP TABLE IF EXISTS warehouse;
 CREATE TABLE warehouse (
+  __apiaryid__ VARCHAR(10) NOT NULL,
   w_id int NOT NULL,
   w_ytd decimal(12,2) NOT NULL,
   w_tax decimal(4,4) NOT NULL,

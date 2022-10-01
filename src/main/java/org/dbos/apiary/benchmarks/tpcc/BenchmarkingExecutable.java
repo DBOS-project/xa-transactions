@@ -83,7 +83,7 @@ public class BenchmarkingExecutable {
             conf.setScaleFactor(1);
         }
         if (cmd.hasOption("w")) {
-            int warehouses = Integer.parseInt(cmd.getOptionValue("s"));
+            int warehouses = Integer.parseInt(cmd.getOptionValue("w"));
             conf.setNumWarehouses(warehouses);
         } else {
             conf.setNumWarehouses(20);
@@ -94,7 +94,7 @@ public class BenchmarkingExecutable {
             if (ThreadUtil.availableProcessors() / 2 < 1) {
                 conf.setLoaderThreads(1);
             } else {
-                conf.setLoaderThreads(ThreadUtil.availableProcessors() / 2);
+                conf.setLoaderThreads(ThreadUtil.availableProcessors());
             }
         }
 

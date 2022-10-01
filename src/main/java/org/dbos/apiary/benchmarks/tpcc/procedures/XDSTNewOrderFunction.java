@@ -25,6 +25,7 @@ import java.util.Random;
 import org.apache.log4j.Logger;
 
 import org.dbos.apiary.benchmarks.tpcc.*;
+import org.dbos.apiary.utilities.Percentile;
 import org.dbos.apiary.xa.XAContext;
 import org.dbos.apiary.xa.XAFunction;
 import java.lang.reflect.Type;
@@ -35,7 +36,11 @@ import com.google.gson.reflect.TypeToken;
 public class XDSTNewOrderFunction extends XAFunction {
     private static final Logger LOG = Logger.getLogger(XDSTNewOrderFunction.class);
     private static Random gen = new Random();
-
+	public static Percentile p1 = new Percentile(); 
+	public static Percentile p2 = new Percentile(); 
+	public static Percentile p3 = new Percentile(); 
+	public static Percentile p4 = new Percentile(); 
+	public static Percentile p5 = new Percentile(); 
     public static final String stmtGetCustSQL = 
         "SELECT C_DISCOUNT, C_LAST, C_CREDIT" +
         "  FROM " + TPCCConstants.TABLENAME_CUSTOMER + 
@@ -234,9 +239,11 @@ public class XDSTNewOrderFunction extends XAFunction {
 	}
 
     public static int runFunction(org.dbos.apiary.postgres.PostgresContext context, int terminalWarehouseID, int numWarehouses) throws Exception {
-        int districtID = TPCCUtil.randomNumber(1,TPCCConfig.configDistPerWhse, gen);
+        long t0 = System.nanoTime();
+		int districtID = TPCCUtil.randomNumber(1,TPCCConfig.configDistPerWhse, gen);
         int customerID = TPCCUtil.getCustomerID(gen);
         int numItems = (int) TPCCUtil.randomNumber(5, 15, gen);
+		//int numItems = 2;
         int[] itemIDs = new int[numItems];
         int[] supplierWarehouseIDs = new int[numItems];
         int[] orderQuantities = new int[numItems];
@@ -303,6 +310,9 @@ public class XDSTNewOrderFunction extends XAFunction {
 			rs.close();
 			rs = null;
 
+			p1.add((System.nanoTime() - t0)/1000);
+			t0 = System.nanoTime();
+
 			// stmtGetWhse.setInt(1, w_id);
 			// rs = stmtGetWhse.executeQuery();
 			rs = context.executeQuery(stmtGetWhseSQL, w_id);
@@ -312,6 +322,8 @@ public class XDSTNewOrderFunction extends XAFunction {
 			rs.close();
 			rs = null;
 
+			p2.add((System.nanoTime() - t0)/1000);
+			t0 = System.nanoTime();
 			// stmtGetDist.setInt(1, w_id);
 			// stmtGetDist.setInt(2, d_id);
 			// rs = stmtGetDist.executeQuery();
@@ -324,6 +336,8 @@ public class XDSTNewOrderFunction extends XAFunction {
 			d_tax = rs.getFloat("D_TAX");
 			rs.close();
 			rs = null;
+			p3.add((System.nanoTime() - t0)/1000);
+			t0 = System.nanoTime();
 
 			//woonhak, need to change order because of foreign key constraints
 			//update next_order_id first, but it might doesn't matter
@@ -374,7 +388,8 @@ public class XDSTNewOrderFunction extends XAFunction {
 			stmtInsertOOrder.setInt(7, o_all_local);
 			stmtInsertOOrder.executeUpdate();
 			change order]]*/
-
+			p4.add((System.nanoTime() - t0)/1000);
+			t0 = System.nanoTime();
 			for (int ol_number = 1; ol_number <= o_ol_cnt; ol_number++) {
 				ol_supply_w_id = supplierWarehouseIDs[ol_number - 1];
 				ol_i_id = itemIDs[ol_number - 1];
@@ -415,6 +430,8 @@ public class XDSTNewOrderFunction extends XAFunction {
 			// stmtUpdateStock.executeBatch();
 
 			total_amount *= (1 + w_tax + d_tax) * (1 - c_discount);
+			p5.add((System.nanoTime() - t0)/1000);
+			t0 = System.nanoTime();
 		} catch(UserAbortException userEx)
 		{
 		    LOG.debug("Caught an expected error in New Order");

@@ -1,5 +1,6 @@
 package org.dbos.apiary.xa;
 
+import org.dbos.apiary.utilities.Percentile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -17,6 +18,8 @@ import java.sql.ResultSet;
 public class MySQLXAConnection extends BaseXAConnection  {
     private static final Logger logger = LoggerFactory.getLogger(MySQLXAConnection.class);
 
+    public Percentile updates = new Percentile();
+    public Percentile queries = new Percentile();
     private final MysqlXADataSource ds;
     private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
@@ -76,5 +79,17 @@ public class MySQLXAConnection extends BaseXAConnection  {
     @Override
     public Connection getConnection() throws SQLException {
         return this.connection.get();
+    }
+
+    @Override
+    public void addUpdateTime(long time) {
+        // TODO Auto-generated method stub
+        updates.add(time);
+    }
+
+    @Override
+    public void addQueryTime(long time) {
+        // TODO Auto-generated method stub
+        queries.add(time);
     }
 }

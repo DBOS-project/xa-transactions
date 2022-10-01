@@ -30,6 +30,8 @@ import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.util.Arrays;
 import java.util.Random;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 import org.dbos.apiary.benchmarks.tpcc.pojo.Customer;
@@ -139,6 +141,47 @@ public class TPCCUtil {
 				+ min;
 	}
 
+	public static AtomicLong customerIdCounter = new AtomicLong(0);
+	public static AtomicLong districtIdCounter = new AtomicLong(0);
+	public static AtomicLong historyIdCounter = new AtomicLong(0);
+	public static AtomicLong itemIdCounter = new AtomicLong(0);
+	public static AtomicLong neworderIdCounter = new AtomicLong(0);
+	public static AtomicLong openorderIdCounter = new AtomicLong(0);
+	public static AtomicLong orderlineIdCounter = new AtomicLong(0);
+	public static AtomicLong stockIdCounter = new AtomicLong(0);
+	public static AtomicLong warehouseIdCounter = new AtomicLong(0);
+
+
+	public static Long nextId(String tableName) {
+		StringBuilder builder = new StringBuilder();
+		int tableIdx = 0;
+		if (tableName.equals(TPCCConstants.TABLENAME_CUSTOMER)) {
+			return customerIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_DISTRICT)) {
+			return districtIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_HISTORY)) {
+			return historyIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_ITEM)) {
+			return itemIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_NEWORDER)) {
+			return neworderIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_OPENORDER)) {
+			return openorderIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_ORDERLINE)) {
+			return orderlineIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_STOCK)) {
+			return stockIdCounter.incrementAndGet();
+		} else if (tableName.equals(TPCCConstants.TABLENAME_WAREHOUSE)) {
+			return warehouseIdCounter.incrementAndGet();
+		} else {
+			return 0l;
+		}
+    }
+	public static AtomicLong idCounter = new AtomicLong(new Random().nextLong());
+	public static Long makeHashedApiaryId(String tableName, Object... objs) {
+		String s = makeApiaryId(tableName, objs);
+		return idCounter.incrementAndGet() ^ s.hashCode();
+	}
 
 	public static String makeApiaryId(String tableName, Object... objs) {
 		StringBuilder builder = new StringBuilder();

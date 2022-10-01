@@ -64,9 +64,7 @@ public class XDSTMySQLPaymentPart extends XAFunction {
     public static String payGetCustCdataSQL = 
             "SELECT C_DATA " +
             "  FROM " + TPCCConstants.TABLENAME_CUSTOMER + 
-            " WHERE C_W_ID = ? " +
-            "   AND C_D_ID = ? " +
-            "   AND C_ID = ?";
+            " WHERE __apiaryID__ =? and C_W_ID = ?";
     
     public static String payUpdateCustBalCdataSQL = 
             "UPDATE " + TPCCConstants.TABLENAME_CUSTOMER + 
@@ -106,7 +104,8 @@ public class XDSTMySQLPaymentPart extends XAFunction {
             // payGetCustCdata.setInt(2, customerDistrictID);
             // payGetCustCdata.setInt(3, c.c_id);
             // rs = payGetCustCdata.executeQuery();
-            ResultSet rs = context.executeQuery(payGetCustCdataSQL, customerWarehouseID, customerDistrictID, c.c_id);
+            String id = TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, customerWarehouseID, customerDistrictID, c.c_id);
+            ResultSet rs = context.executeQuery(payGetCustCdataSQL, id, customerWarehouseID);
             if (!rs.next())
                 throw new RuntimeException("C_ID=" + c.c_id + " C_W_ID=" + customerWarehouseID + " C_D_ID=" + customerDistrictID + " not found!");
             c_data = rs.getString("C_DATA");
@@ -129,7 +128,7 @@ public class XDSTMySQLPaymentPart extends XAFunction {
             //result = context.executeUpdate(customerWarehouseDBType, payUpdateCustBalCdataSQL, c.c_balance, c.c_ytd_payment, c.c_payment_cnt, c_data, customerWarehouseID, customerDistrictID, c.c_id);
             //context.executeUpdate(payUpdateCustBalCdataSQL, TPCCUtil.concatenate(c.c_w_id, c.c_d_id, c.c_id), c.c_balance, c.c_ytd_payment, c.c_payment_cnt, c_data, customerWarehouseID, customerDistrictID, c.c_id);
             c.c_data = c_data;
-            String id = TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, c.c_w_id, c.c_d_id, c.c_id);
+            id = TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, c.c_w_id, c.c_d_id, c.c_id);
             context.executeUpsert(TPCCConstants.TABLENAME_CUSTOMER, id, 
                                 c.c_w_id, c.c_d_id, c.c_id, c.c_discount, 
                                 c.c_credit, c.c_last, c.c_first, 

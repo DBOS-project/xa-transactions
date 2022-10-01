@@ -89,8 +89,8 @@ public class XAPaymentFunction extends XAFunction {
     
     public static String payInsertHistSQL = 
             "INSERT INTO " + TPCCConstants.TABLENAME_HISTORY + 
-            " (H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA) " +
-            " VALUES (?,?,?,?,?,?,?,?)";
+            " (__apiaryid__, H_C_D_ID, H_C_W_ID, H_C_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA) " +
+            " VALUES (?,?,?,?,?,?,?,?,?)";
     
     public static String customerByNameSQL =
             "SELECT *" +
@@ -283,7 +283,8 @@ public class XAPaymentFunction extends XAFunction {
         // payInsertHist.setDouble(7, paymentAmount);
         // payInsertHist.setString(8, h_data);
         // payInsertHist.executeUpdate();
-        context.executeUpdate(homeWarehouseDBType, payInsertHistSQL, customerDistrictID, customerWarehouseID, c.c_id, districtID, w_id,  
+        context.executeUpdate(homeWarehouseDBType, payInsertHistSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_HISTORY, customerWarehouseID, customerDistrictID, c.c_id, w_id, districtID),
+                                customerDistrictID, customerWarehouseID, c.c_id, districtID, w_id,  
                                 TPCCLoader.getTimestamp(System.currentTimeMillis()), paymentAmount, h_data);
         //conn.commit();
 

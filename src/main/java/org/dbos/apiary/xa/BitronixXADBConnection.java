@@ -1,5 +1,6 @@
 package org.dbos.apiary.xa;
 
+import org.dbos.apiary.utilities.Percentile;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -16,6 +17,8 @@ import java.sql.Connection;
 public class BitronixXADBConnection extends BaseXAConnection  {
     private static final Logger logger = LoggerFactory.getLogger(BitronixXADBConnection.class);
 
+    public Percentile updates = new Percentile();
+    public Percentile queries = new Percentile();
     private PoolingDataSource ds;
     //private final ThreadLocal<javax.sql.XAConnection> xaconnection;
     private final ThreadLocal<Connection> connection;
@@ -107,5 +110,16 @@ public class BitronixXADBConnection extends BaseXAConnection  {
     @Override
     public Connection getConnection() throws SQLException {
         return connection.get();
+    }
+
+    @Override
+    public void addUpdateTime(long time) {
+        updates.add(time);
+        
+    }
+
+    @Override
+    public void addQueryTime(long time) {
+        queries.add(time);
     }
 }

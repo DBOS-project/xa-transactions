@@ -197,8 +197,8 @@ public class TPCCLoader {
 
 		final String itemInsertSQL = 
 		"INSERT INTO " + TPCCConstants.TABLENAME_ITEM + 
-		" (I_ID, I_NAME, I_PRICE, I_DATA, I_IM_ID) " +
-		" VALUES (?,?,?,?,?)";
+		" (__apiaryid__, I_ID, I_NAME, I_PRICE, I_DATA, I_IM_ID) " +
+		" VALUES (?,?,?,?,?,?)";
 	
         try {
             PreparedStatement itemPrepStmt = conn.prepareStatement(itemInsertSQL);
@@ -232,6 +232,7 @@ public class TPCCLoader {
                 k++;
 
                 int idx = 1;
+				itemPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_ITEM, item.i_id));
                 itemPrepStmt.setLong(idx++, item.i_id);
                 itemPrepStmt.setString(idx++, item.i_name);
                 itemPrepStmt.setDouble(idx++, item.i_price);
@@ -280,8 +281,8 @@ public class TPCCLoader {
 
 		final String whInsertSQL = 
 		"INSERT INTO " + TPCCConstants.TABLENAME_WAREHOUSE + 
-		" (W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) " +
-		" VALUES (?,?,?,?,?,?,?,?,?)";
+		" (__apiaryID__, W_ID, W_YTD, W_TAX, W_NAME, W_STREET_1, W_STREET_2, W_CITY, W_STATE, W_ZIP) " +
+		" VALUES (?, ?,?,?,?,?,?,?,?,?)";
 
         try {
             PreparedStatement whsePrepStmt = conn.prepareStatement(whInsertSQL);
@@ -300,6 +301,7 @@ public class TPCCLoader {
 			warehouse.w_zip = "123456789";
 
 			int idx = 1;
+			whsePrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_WAREHOUSE, warehouse.w_id));
 			whsePrepStmt.setLong(idx++, warehouse.w_id);
 			whsePrepStmt.setDouble(idx++, warehouse.w_ytd);
 			whsePrepStmt.setDouble(idx++, warehouse.w_tax);
@@ -333,8 +335,8 @@ public class TPCCLoader {
 
 		final String stockInsertSQL = 
 		"INSERT INTO " + TPCCConstants.TABLENAME_STOCK + 
-		" (S_W_ID, S_I_ID, S_QUANTITY, S_YTD, S_ORDER_CNT, S_REMOTE_CNT, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05, S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10) " +
-		" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+		" (__apiaryID__, S_W_ID, S_I_ID, S_QUANTITY, S_YTD, S_ORDER_CNT, S_REMOTE_CNT, S_DATA, S_DIST_01, S_DIST_02, S_DIST_03, S_DIST_04, S_DIST_05, S_DIST_06, S_DIST_07, S_DIST_08, S_DIST_09, S_DIST_10) " +
+		" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 
 		try {
 		    PreparedStatement stckPrepStmt = conn.prepareStatement(stockInsertSQL);
@@ -367,6 +369,7 @@ public class TPCCLoader {
 
 				k++;
 				int idx = 1;
+				stckPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, stock.s_w_id, stock.s_i_id));
 				stckPrepStmt.setLong(idx++, stock.s_w_id);
 				stckPrepStmt.setLong(idx++, stock.s_i_id);
 				stckPrepStmt.setLong(idx++, stock.s_quantity);
@@ -414,8 +417,8 @@ public class TPCCLoader {
 
 		final String distInsertSQL = 
 		"INSERT INTO " + TPCCConstants.TABLENAME_DISTRICT + 
-		" (D_W_ID, D_ID, D_YTD, D_TAX, D_NEXT_O_ID, D_NAME, D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP) " +
-		" VALUES (?,?,?,?,?,?,?,?,?,?,?)";
+		" (__apiaryID__, D_W_ID, D_ID, D_YTD, D_TAX, D_NEXT_O_ID, D_NAME, D_STREET_1, D_STREET_2, D_CITY, D_STATE, D_ZIP) " +
+		" VALUES (?,?,?,?,?,?,?,?,?,?,?,?)";
 
 		try {
 
@@ -440,6 +443,7 @@ public class TPCCLoader {
 
 				k++;
 				int idx = 1;
+				distPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_DISTRICT, district.d_w_id, district.d_id));
 				distPrepStmt.setLong(idx++, district.d_w_id);
 				distPrepStmt.setLong(idx++, district.d_id);
 				distPrepStmt.setDouble(idx++, district.d_ytd);
@@ -473,13 +477,13 @@ public class TPCCLoader {
 
 		final String custInsertSQL = 
 		"INSERT INTO " + TPCCConstants.TABLENAME_CUSTOMER + 
-		" (C_W_ID, C_D_ID, C_ID, C_DISCOUNT, C_CREDIT, C_LAST, C_FIRST, C_CREDIT_LIM, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_DELIVERY_CNT, C_STREET_1,C_STREET_2, C_CITY, C_STATE, C_ZIP, C_PHONE, C_SINCE, C_MIDDLE, C_DATA) " +
-		" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
+		" (__apiaryID__, C_W_ID, C_D_ID, C_ID, C_DISCOUNT, C_CREDIT, C_LAST, C_FIRST, C_CREDIT_LIM, C_BALANCE, C_YTD_PAYMENT, C_PAYMENT_CNT, C_DELIVERY_CNT, C_STREET_1,C_STREET_2, C_CITY, C_STATE, C_ZIP, C_PHONE, C_SINCE, C_MIDDLE, C_DATA) " +
+		" VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
 	
 		final String histInsertSQL = 
 		"INSERT INTO " + TPCCConstants.TABLENAME_HISTORY + 
-		" (H_C_ID, H_C_D_ID, H_C_W_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA) " +
-		" VALUES (?,?,?,?,?,?,?,?)";
+		" (__apiaryID__, H_C_ID, H_C_D_ID, H_C_W_ID, H_D_ID, H_W_ID, H_DATE, H_AMOUNT, H_DATA) " +
+		" VALUES (?,?,?,?,?,?,?,?,?)";
 
 		Customer customer = new Customer();
 		History history = new History();
@@ -541,6 +545,7 @@ public class TPCCLoader {
 
 					k = k + 2;
 					int idx = 1;
+					custPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, customer.c_w_id, customer.c_d_id, customer.c_id));
 					custPrepStmt.setLong(idx++, customer.c_w_id);
 					custPrepStmt.setLong(idx++, customer.c_d_id);
 					custPrepStmt.setLong(idx++, customer.c_id);
@@ -565,6 +570,7 @@ public class TPCCLoader {
 					custPrepStmt.addBatch();
 
 					idx = 1;
+					histPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_HISTORY, history.h_c_id, history.h_c_d_id, history.h_c_w_id, history.h_d_id, history.h_w_id, history.h_date));
 					histPrepStmt.setInt(idx++, history.h_c_id);
 					histPrepStmt.setInt(idx++, history.h_c_d_id);
 					histPrepStmt.setInt(idx++, history.h_c_w_id);
@@ -606,18 +612,18 @@ public class TPCCLoader {
 	protected int loadOrders(Connection conn, int w_id, int districtsPerWarehouse, int customersPerDistrict) {
 		final String orderInsertSQL = 
 			"INSERT INTO " + TPCCConstants.TABLENAME_OPENORDER + 
-			" (O_W_ID, O_D_ID, O_ID, O_C_ID, O_CARRIER_ID, O_OL_CNT, O_ALL_LOCAL, O_ENTRY_D) " +
-			" VALUES (?,?,?,?,?,?,?,?)";
+			" (__apiaryID__, O_W_ID, O_D_ID, O_ID, O_C_ID, O_CARRIER_ID, O_OL_CNT, O_ALL_LOCAL, O_ENTRY_D) " +
+			" VALUES (?,?,?,?,?,?,?,?,?)";
 	
 		final String nworInsertSQL = 
 			"INSERT INTO " + TPCCConstants.TABLENAME_NEWORDER + 
-			" (NO_W_ID, NO_D_ID, NO_O_ID) " +
-			" VALUES (?,?,?)";
+			" (__apiaryID__, NO_W_ID, NO_D_ID, NO_O_ID) " +
+			" VALUES (?,?,?,?)";
 
 		final String orlnInsertSQL = 
 			"INSERT INTO " + TPCCConstants.TABLENAME_ORDERLINE + 
-			" (OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER, OL_I_ID, OL_DELIVERY_D, OL_AMOUNT, OL_SUPPLY_W_ID, OL_QUANTITY, OL_DIST_INFO) " +
-			" VALUES (?,?,?,?,?,?,?,?,?,?)";
+			" (__apiaryID__, OL_W_ID, OL_D_ID, OL_O_ID, OL_NUMBER, OL_I_ID, OL_DELIVERY_D, OL_AMOUNT, OL_SUPPLY_W_ID, OL_QUANTITY, OL_DIST_INFO) " +
+			" VALUES (?,?,?,?,?,?,?,?,?,?,?)";
 
 		int k = 0;
 		int t = 0;
@@ -667,6 +673,7 @@ public class TPCCLoader {
 
 					k++;
 					int idx = 1;
+					ordrPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_OPENORDER, oorder.o_w_id, oorder.o_d_id, oorder.o_c_id, oorder.o_id));
 					ordrPrepStmt.setInt(idx++, oorder.o_w_id);
 		            ordrPrepStmt.setInt(idx++, oorder.o_d_id);
 		            ordrPrepStmt.setInt(idx++, oorder.o_id);
@@ -691,6 +698,7 @@ public class TPCCLoader {
 
 						k++;
 						idx = 1;
+						nworPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_NEWORDER, new_order.no_w_id, new_order.no_d_id, new_order.no_o_id));
 				        nworPrepStmt.setInt(idx++, new_order.no_w_id);
 			            nworPrepStmt.setInt(idx++, new_order.no_d_id);
 				        nworPrepStmt.setInt(idx++, new_order.no_o_id);
@@ -719,6 +727,7 @@ public class TPCCLoader {
 
 						k++;
 						idx = 1;
+						orlnPrepStmt.setString(idx++, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_ORDERLINE, order_line.ol_w_id, order_line.ol_d_id, order_line.ol_o_id, order_line.ol_number));
 						orlnPrepStmt.setInt(idx++, order_line.ol_w_id);
 			            orlnPrepStmt.setInt(idx++, order_line.ol_d_id);
 			            orlnPrepStmt.setInt(idx++, order_line.ol_o_id);

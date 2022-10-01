@@ -11,8 +11,8 @@ import org.dbos.apiary.benchmarks.tpcc.procedures.XDSTPaymentFunction;
 import org.dbos.apiary.client.ApiaryWorkerClient;
 import org.dbos.apiary.mysql.MysqlConnection;
 import org.dbos.apiary.postgres.PostgresConnection;
-import org.dbos.apiary.procedures.mysql.MysqlUpsertPerson;
 import org.dbos.apiary.utilities.ApiaryConfig;
+import org.dbos.apiary.utilities.Percentile;
 import org.dbos.apiary.worker.ApiaryNaiveScheduler;
 import org.dbos.apiary.worker.ApiaryWorker;
 import org.dbos.apiary.xa.BitronixXAConnection;
@@ -21,6 +21,7 @@ import org.dbos.apiary.xa.MySQLXAConnection;
 import org.dbos.apiary.xa.PostgresXAConnection;
 import org.dbos.apiary.xa.XAConfig;
 import org.dbos.apiary.xa.XAConnection;
+import org.dbos.apiary.xa.XAFunction;
 import org.dbos.apiary.xa.procedures.BankAudit;
 import org.dbos.apiary.xa.procedures.BankTransfer;
 import org.dbos.apiary.xa.procedures.GetApiaryClientID;
@@ -41,10 +42,13 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.stream.Collectors;
 
 public class TPCCBenchmark {
+    static public void printPercentile(Percentile p,String name) {
+        logger.info("{}: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", p.size(), name, p.average(), p.nth(50), p.nth(75), p.nth(90), p.nth(95), p.nth(99));
+    }
     private static final Logger logger = LoggerFactory.getLogger(TPCCBenchmark.class);
-    private static final int numWorkerThreads = 8;
-    private static final int threadPoolSize = 8;
-    private static final int threadWarmupMs = 5000;  // First 5 seconds of requests would be warm-up and not recorded.
+    private static final int numWorkerThreads = 16;
+    private static final int threadPoolSize = 64;
+    private static final int threadWarmupMs = 30000;  // First 30 seconds of requests would be warm-up and not recorded.
 
     private static String[] DBTypes = {XAConnection.MySQLDBType, XAConnection.PostgresDBType};
 
@@ -100,13 +104,14 @@ public class TPCCBenchmark {
 
     public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder, boolean mysqlDelayLogFlush, boolean skipLoading, boolean skipBench) throws SQLException, InterruptedException {
         XAConnection conn = null;
-        
+        BitronixXADBConnection mysqlXAConn = null;
+        BitronixXADBConnection postgresXAConn = null;
         if (transactionManager.equals("bitronix")) {
-            BitronixXADBConnection mysqlConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
-            BitronixXADBConnection postgresConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
-            conn = new BitronixXAConnection(postgresConn, mysqlConn);
+            mysqlXAConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
+            postgresXAConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
+            conn = new BitronixXAConnection(postgresXAConn, mysqlXAConn);
             if (!skipLoading) {
-                TPCCLoader loader = new TPCCLoader(conf, postgresConn, mysqlConn);
+                TPCCLoader loader = new TPCCLoader(conf, postgresXAConn, mysqlXAConn);
                 List<LoaderThread> loaders = loader.createLoaderThreads();
                 ThreadUtil.runNewPool(loaders, conf.getLoaderThreads());
             }
@@ -183,13 +188,12 @@ public class TPCCBenchmark {
                 return;
             }
             try {
-                long t0 = System.nanoTime();
                 int chooser = ThreadLocalRandom.current().nextInt(100);
                 int warehouseId;
                 do {
                     warehouseId = ThreadLocalRandom.current().nextInt(conf.getNumWarehouses()) + 1;
                 } while (TPCCLoader.getDBType(warehouseId).equals(TPCCConstants.DBTYPE_POSTGRES) == false);
-
+                long t0 = System.nanoTime();
                 if (chooser < percentageNewOrder) {
                     if (transactionManager.equals("bitronix")) {
                         client.get().executeFunction("XANewOrderFunction", warehouseId, conf.getNumWarehouses()).getInt();
@@ -224,6 +228,25 @@ public class TPCCBenchmark {
                 // Finished warmup, start recording.
                 warmed.set(true);
                 logger.info("Warmed up");
+                if (pconn != null) {
+                    pconn.upserts.clear();
+                    pconn.queries.clear();
+                    pconn.commits.clear();
+                }
+                if (mconn != null) {
+                    mconn.enableSlowQueryLog();
+                    mconn.upserts.clear();
+                    mconn.queries.clear();
+                    mconn.commits.clear();
+                }
+                if (mysqlXAConn != null) {
+                    mysqlXAConn.updates.clear();
+                    mysqlXAConn.updates.clear();
+                }
+                if (postgresXAConn != null) {
+                    postgresXAConn.queries.clear();
+                    postgresXAConn.queries.clear();
+                }
             }
             threadPool.submit(r);
             while (System.nanoTime() - t < interval.longValue() * 1000) {
@@ -277,12 +300,32 @@ public class TPCCBenchmark {
         threadPool.shutdown();
         threadPool.awaitTermination(10000, TimeUnit.SECONDS);
         logger.info("All queries finished! {}", System.currentTimeMillis() - startTime);
-        logger.info("MySQL upsert stats: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", mconn.upserts.size(), mconn.upserts.average(), mconn.upserts.nth(50), mconn.upserts.nth(75), mconn.upserts.nth(90), mconn.upserts.nth(95), mconn.upserts.nth(99));
+        if (transactionManager.equals("bitronix")) {
+            printPercentile(mysqlXAConn.updates, "MySQL XA update stats");
+            printPercentile(mysqlXAConn.queries, "MySQL XA query stats");
+            printPercentile(postgresXAConn.updates, "Postgres XA update stats");
+            printPercentile(postgresXAConn.queries, "Postgres XA query stats");
+            printPercentile(conn.funcCalls, "XA function stats");
+        } else if (transactionManager.equals("XDST")) {
+            logger.info("group flush {}", mconn.groupFlushLogs.get());
+            printPercentile(mconn.upserts, "MySQL upsert stats");
+            printPercentile(mconn.queries, "MySQL query stats");
+            printPercentile(mconn.commits, "MySQL commit stats");
 
-        logger.info("MySQL query stats: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", mconn.queries.size(), mconn.queries.average(), mconn.queries.nth(50), mconn.queries.nth(75), mconn.queries.nth(90),mconn.queries.nth(95), mconn.queries.nth(99));
+            printPercentile(pconn.upserts, "Postgres upsert stats");
+            printPercentile(pconn.queries, "Postgres query stats");
+            printPercentile(pconn.commits, "Postgres commit stats");
+            printPercentile(pconn.rollbacks, "Postgres rollback stats");
+            printPercentile(pconn.funcCalls, "Postgres function stats");
 
-        logger.info("MySQL commit stats: count {}, avg latency {}, p50 latency {}, p75 latency {}, p90 latency {}, p95 latency {}, p99 latency {} ", mconn.commits.size(), mconn.commits.average(), mconn.commits.nth(50), mconn.commits.nth(75), mconn.commits.nth(90), mconn.commits.nth(95), mconn.commits.nth(99));
 
+            printPercentile(XDSTNewOrderFunction.p1, "XDSTNewOrderFunction.p1");
+            printPercentile(XDSTNewOrderFunction.p2, "XDSTNewOrderFunction.p2");
+            printPercentile(XDSTNewOrderFunction.p3, "XDSTNewOrderFunction.p3");
+            printPercentile(XDSTNewOrderFunction.p4, "XDSTNewOrderFunction.p4");
+            printPercentile(XDSTNewOrderFunction.p5, "XDSTNewOrderFunction.p5");
+        }
+        
         if (apiaryWorker != null) {
             apiaryWorker.shutdown();
         }

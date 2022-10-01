@@ -33,7 +33,7 @@ public class XDSTMySQLPaymentGetCustomerByID extends XAFunction {
     public static String payGetCustSQL = 
             "SELECT * " +
             "  FROM " + TPCCConstants.TABLENAME_CUSTOMER + 
-            " WHERE __apiaryid__ = ?";
+            " WHERE __apiaryid__ = ? and C_W_ID = ?";
     
     public static String runFunction(org.dbos.apiary.mysql.MysqlContext context, int c_w_id, int c_d_id, int c_id) throws Exception {
         return getCustomerById(context, c_w_id, c_d_id, c_id);
@@ -48,7 +48,7 @@ public class XDSTMySQLPaymentGetCustomerByID extends XAFunction {
         // payGetCust.setInt(2, c_d_id);
         // payGetCust.setInt(3, c_id);
         // ResultSet rs = payGetCust.executeQuery();
-        ResultSet rs = context.executeQuery(payGetCustSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, c_w_id, c_d_id, c_id));
+        ResultSet rs = context.executeQuery(payGetCustSQL, TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, c_w_id, c_d_id, c_id), c_w_id);
         if (!rs.next()) {
             throw new RuntimeException("C_ID=" + c_id + " C_D_ID=" + c_d_id + " C_W_ID=" + c_w_id + " not found!");
         }

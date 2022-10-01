@@ -46,7 +46,9 @@ CREATE TABLE CUSTOMER (
   KEY(__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+)
+PARTITION BY HASH(C_W_ID)
+PARTITIONS 16;
 
 
 CREATE TABLE DISTRICT (
@@ -68,7 +70,10 @@ CREATE TABLE DISTRICT (
   KEY(__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+)
+PARTITION BY HASH(D_W_ID)
+PARTITIONS 16;
+
 
 -- TODO: H_DATE ON UPDATE CURRENT_TIMESTAMP
 
@@ -87,7 +92,9 @@ CREATE TABLE HISTORY (
   KEY(__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+) 
+PARTITION BY HASH(H_C_W_ID)
+PARTITIONS 16;
 
 
 CREATE TABLE ITEM (
@@ -117,7 +124,10 @@ CREATE TABLE NEW_ORDER (
   KEY(__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+)
+PARTITION BY HASH(NO_W_ID)
+PARTITIONS 16;
+
 
 -- TODO: O_ENTRY_D  ON UPDATE CURRENT_TIMESTAMP
 
@@ -138,7 +148,10 @@ CREATE TABLE OORDER (
   KEY (__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+) 
+PARTITION BY HASH(O_W_ID)
+PARTITIONS 16;
+
 
 
 CREATE TABLE ORDER_LINE (
@@ -159,7 +172,10 @@ CREATE TABLE ORDER_LINE (
   KEY (__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+) 
+PARTITION BY HASH(OL_W_ID)
+PARTITIONS 16;
+
 
 CREATE TABLE STOCK (
   __apiaryID__ VARCHAR(20) NOT NULL,
@@ -186,7 +202,10 @@ CREATE TABLE STOCK (
   KEY (__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+)
+PARTITION BY HASH(S_W_ID)
+PARTITIONS 16;
+
 
 CREATE TABLE WAREHOUSE (
   __apiaryID__ VARCHAR(10) NOT NULL,
@@ -205,7 +224,10 @@ CREATE TABLE WAREHOUSE (
   KEY (__apiaryID__),
   KEY(__endVersion__),
   KEY(__beginVersion__)
-);
+) 
+PARTITION BY HASH(W_ID)
+PARTITIONS 16;
+
 
 -- INDEXES
 CREATE INDEX IDX_CUSTOMER_NAME ON CUSTOMER (C_W_ID,C_D_ID,C_LAST,C_FIRST);

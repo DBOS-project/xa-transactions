@@ -17,7 +17,8 @@ public abstract class BaseXAConnection implements XADBConnection {
     public abstract javax.transaction.xa.XAResource getXAResource() throws SQLException;
     public abstract java.sql.Connection getNewConnection() throws SQLException;
     public abstract java.sql.Connection getConnection() throws SQLException;
-    
+    public abstract void addUpdateTime(long time);
+    public abstract void addQueryTime(long time);
     public void close() {
 
     }
@@ -148,10 +149,14 @@ public abstract class BaseXAConnection implements XADBConnection {
      */
     public int executeUpdate(String procedure, Object... input) throws SQLException {
         // First, prepare statement. Then, execute.
+        long t0 = System.nanoTime();
         Connection c = getConnection();
         PreparedStatement pstmt = c.prepareStatement(procedure);
         prepareStatement(pstmt, input);
-        return pstmt.executeUpdate();
+        int res = pstmt.executeUpdate();
+        long time = System.nanoTime() - t0;
+        addUpdateTime(time / 1000);
+        return res;
     }
 
     /**
@@ -160,10 +165,13 @@ public abstract class BaseXAConnection implements XADBConnection {
      * @param input     input parameters for the SQL statement.
      */
     public ResultSet executeQuery(String procedure, Object... input) throws SQLException {
+        long t0 = System.nanoTime();
         Connection c = getConnection();
         PreparedStatement pstmt = c.prepareStatement(procedure, ResultSet.TYPE_SCROLL_INSENSITIVE, ResultSet.CONCUR_READ_ONLY);
         prepareStatement(pstmt, input);
         ResultSet rs = pstmt.executeQuery();
+        long time = System.nanoTime() - t0;
+        addQueryTime(time / 1000);
         return rs;
     }
 }
