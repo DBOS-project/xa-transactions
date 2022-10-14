@@ -174,4 +174,14 @@ public abstract class BaseXAConnection implements XADBConnection {
         addQueryTime(time / 1000);
         return rs;
     }
+
+    @Override
+    public void commitNonXAConnection() throws SQLException {
+        getConnection().commit();
+    }
+
+    @Override
+    public void rollbackNonXAConnection() throws SQLException {
+        getConnection().rollback();
+    }
 }

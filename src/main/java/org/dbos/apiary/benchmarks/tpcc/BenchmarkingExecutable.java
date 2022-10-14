@@ -26,6 +26,7 @@ public class BenchmarkingExecutable {
         options.addOption("df", false, "Delay log flushes till the end of validation in MySQL");
         options.addOption("skipLoading", false, "Skip data loading");
         options.addOption("skipBench", false, "Skip benchmark");
+        options.addOption("noxa", false, "Disable XA");
         CommandLineParser parser = new DefaultParser();
         CommandLine cmd = parser.parse(options, args);
 
@@ -67,6 +68,10 @@ public class BenchmarkingExecutable {
         boolean mysqlDelayLogFlush = false;
         boolean skipLoading = false;
         boolean skipBench = false;
+        boolean disableXA = false;
+        if (cmd.hasOption("noxa")) {
+            disableXA = true;
+        }
         if (cmd.hasOption("df")) {
             mysqlDelayLogFlush = true;
         }
@@ -106,6 +111,6 @@ public class BenchmarkingExecutable {
         }
         logger.info("TPCC benchmark neworder percentage: {}%", percentageNewOrder);
         logger.info("TPCC benchmark against postgres@{}, mysql@{}", postgresAddr, mysqlAddr);
-        TPCCBenchmark.benchmark(conf, transactionManager, mainHostAddr, interval, duration, percentageNewOrder, mysqlDelayLogFlush, skipLoading, skipBench);
+        TPCCBenchmark.benchmark(conf, transactionManager, mainHostAddr, interval, duration, percentageNewOrder, mysqlDelayLogFlush, skipLoading, skipBench, disableXA);
     }
 }

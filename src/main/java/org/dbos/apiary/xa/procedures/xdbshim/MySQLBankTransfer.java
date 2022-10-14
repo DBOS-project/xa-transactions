@@ -15,9 +15,9 @@ public class MySQLBankTransfer extends XAFunction {
 
     public static int runFunction(org.dbos.apiary.mysql.MysqlContext context, boolean decrement, int accountId) throws Exception {
         if (decrement) {
-            context.executeUpsert("BankAccount", decrementQuery, accountId);
+            context.executeUpsert("BankAccount", decrementQuery, null,accountId);
         } else {
-            context.executeUpsert("BankAccount", incrementQuery, accountId);
+            context.executeUpsert("BankAccount", incrementQuery, null, accountId);
         }
         return 1;
     }

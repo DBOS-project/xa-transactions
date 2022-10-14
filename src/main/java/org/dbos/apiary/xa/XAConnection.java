@@ -17,17 +17,23 @@ import java.util.Map;
 import java.util.Set;
 import java.util.TreeMap;
 import java.util.concurrent.atomic.AtomicLong;
-
+import org.dbos.apiary.utilities.Tracer;
 public class XAConnection implements ApiaryConnection {
 
     private AtomicLong xidCounter = new AtomicLong(1);
     private static final Logger logger = LoggerFactory.getLogger(XAConnection.class);
-    public static String PostgresDBType = "Postgres";
-    public static String MySQLDBType = "MySQL";
+    public static String PostgresDBType = "postgres";
+    public static String MySQLDBType = "mysql";
     public static Percentile funcCalls = new Percentile();
     XADBConnection postgresConnection;
     XADBConnection mysqlConnection;
     
+    public Tracer tracer = null;
+
+    public void setTracer(Tracer tracer) {
+        this.tracer = tracer;
+    }
+
     public XADBConnection getXAConnection(String DBType) {
         if (DBType.equals(PostgresDBType)) {
             return postgresConnection;

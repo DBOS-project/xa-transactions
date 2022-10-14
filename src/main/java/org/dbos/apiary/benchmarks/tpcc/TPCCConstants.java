@@ -27,6 +27,6 @@ public abstract class TPCCConstants {
     public static final String TABLENAME_ORDERLINE = "ORDER_LINE";
     public static final String TABLENAME_NEWORDER = "NEW_ORDER";
 
-    public static final String DBTYPE_MYSQL = "MySQL";
-    public static final String DBTYPE_POSTGRES = "Postgres";
+    public static final String DBTYPE_MYSQL = "mysql";
+    public static final String DBTYPE_POSTGRES = "postgres";
 }

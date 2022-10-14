@@ -139,7 +139,7 @@ public class XDSTMySQLNewOrderPart extends XAFunction {
 		// stmtUpdateStock.setInt(5, ol_supply_w_id);
 		// stmtUpdateStock.addBatch();
 		String id = TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_STOCK, s_w_id, s_i_id);
-		context.executeUpsert(TPCCConstants.TABLENAME_STOCK, id, s_w_id, s_i_id, s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, 
+		context.executeUpsertWithPredicate(TPCCConstants.TABLENAME_STOCK, id, "S_W_ID="+s_w_id, s_w_id, s_i_id, s_quantity, s_ytd, s_order_cnt, s_remote_cnt, s_data, 
 				s_dist_01,s_dist_02,s_dist_03,s_dist_04,s_dist_05,s_dist_06,s_dist_07,s_dist_08,s_dist_09,s_dist_10);
 
 		double ol_amount = ol_quantity * i_price;

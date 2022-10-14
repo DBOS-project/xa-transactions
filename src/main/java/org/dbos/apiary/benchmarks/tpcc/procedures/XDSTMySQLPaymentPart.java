@@ -129,7 +129,7 @@ public class XDSTMySQLPaymentPart extends XAFunction {
             //context.executeUpdate(payUpdateCustBalCdataSQL, TPCCUtil.concatenate(c.c_w_id, c.c_d_id, c.c_id), c.c_balance, c.c_ytd_payment, c.c_payment_cnt, c_data, customerWarehouseID, customerDistrictID, c.c_id);
             c.c_data = c_data;
             id = TPCCUtil.makeApiaryId(TPCCConstants.TABLENAME_CUSTOMER, c.c_w_id, c.c_d_id, c.c_id);
-            context.executeUpsert(TPCCConstants.TABLENAME_CUSTOMER, id, 
+            context.executeUpsertWithPredicate(TPCCConstants.TABLENAME_CUSTOMER, id, "C_W_ID="+c.c_w_id,
                                 c.c_w_id, c.c_d_id, c.c_id, c.c_discount, 
                                 c.c_credit, c.c_last, c.c_first, 
                                 c.c_credit_lim, c.c_balance, c.c_ytd_payment, 
@@ -162,7 +162,7 @@ public class XDSTMySQLPaymentPart extends XAFunction {
             if (c.c_middle == null) {
                 LOG.info("c.c_middle is null");
             }
-            context.executeUpsert(TPCCConstants.TABLENAME_CUSTOMER, id, 
+            context.executeUpsertWithPredicate(TPCCConstants.TABLENAME_CUSTOMER, id, "C_W_ID="+c.c_w_id,
                                 c.c_w_id, c.c_d_id, c.c_id, c.c_discount, 
                                 c.c_credit, c.c_last, c.c_first, 
                                 c.c_credit_lim, c.c_balance, c.c_ytd_payment, 

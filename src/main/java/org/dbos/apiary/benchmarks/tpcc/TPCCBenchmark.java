@@ -13,6 +13,7 @@ import org.dbos.apiary.mysql.MysqlConnection;
 import org.dbos.apiary.postgres.PostgresConnection;
 import org.dbos.apiary.utilities.ApiaryConfig;
 import org.dbos.apiary.utilities.Percentile;
+import org.dbos.apiary.utilities.Tracer;
 import org.dbos.apiary.worker.ApiaryNaiveScheduler;
 import org.dbos.apiary.worker.ApiaryWorker;
 import org.dbos.apiary.xa.BitronixXAConnection;
@@ -102,14 +103,16 @@ public class TPCCBenchmark {
         return ds;
     }
 
-    public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder, boolean mysqlDelayLogFlush, boolean skipLoading, boolean skipBench) throws SQLException, InterruptedException {
+    public static void benchmark(WorkloadConfiguration conf, String transactionManager, String mainHostAddr,  Integer interval, Integer duration, int percentageNewOrder, boolean mysqlDelayLogFlush, boolean skipLoading, boolean skipBench, boolean disbaleXA) throws SQLException, InterruptedException {
         XAConnection conn = null;
         BitronixXADBConnection mysqlXAConn = null;
         BitronixXADBConnection postgresXAConn = null;
+        org.dbos.apiary.utilities.Tracer tracer = new org.dbos.apiary.utilities.Tracer();
         if (transactionManager.equals("bitronix")) {
             mysqlXAConn = new BitronixXADBConnection("MySQL" + UUID.randomUUID().toString(), "com.mysql.cj.jdbc.MysqlXADataSource", conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
             postgresXAConn = new BitronixXADBConnection("Postgres" + UUID.randomUUID().toString(), "org.postgresql.xa.PGXADataSource", conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
-            conn = new BitronixXAConnection(postgresXAConn, mysqlXAConn);
+            conn = new BitronixXAConnection(postgresXAConn, mysqlXAConn, disbaleXA);
+            conn.setTracer(tracer);
             if (!skipLoading) {
                 TPCCLoader loader = new TPCCLoader(conf, postgresXAConn, mysqlXAConn);
                 List<LoaderThread> loaders = loader.createLoaderThreads();
@@ -143,9 +146,8 @@ public class TPCCBenchmark {
         try {
             mconn = new MysqlConnection(conf.getDBAddressMySQL(), XAConfig.mysqlPort, conf.getDBName(), "root", "dbos");
             pconn = new PostgresConnection(conf.getDBAddressPG(), XAConfig.postgresPort, conf.getDBName(), "postgres", "dbos");
-            if (mysqlDelayLogFlush) {
-                mconn.enableDelayedFlush();
-            }
+            pconn.setTracer(tracer);
+            mconn.setTracer(tracer);
         } catch (Exception e) {
             logger.info("No MySQL/Postgres instance! {}", e.getMessage());
             return;
@@ -228,13 +230,13 @@ public class TPCCBenchmark {
                 // Finished warmup, start recording.
                 warmed.set(true);
                 logger.info("Warmed up");
-                if (pconn != null) {
-                    pconn.upserts.clear();
-                    pconn.queries.clear();
-                    pconn.commits.clear();
-                }
+                // if (pconn != null) {
+                //     pconn.upserts.clear();
+                //     pconn.queries.clear();
+                //     pconn.commits.clear();
+                // }
                 if (mconn != null) {
-                    mconn.enableSlowQueryLog();
+                    //mconn.enableSlowQueryLog();
                     mconn.upserts.clear();
                     mconn.queries.clear();
                     mconn.commits.clear();
@@ -247,6 +249,7 @@ public class TPCCBenchmark {
                     postgresXAConn.queries.clear();
                     postgresXAConn.queries.clear();
                 }
+                tracer.clear();
             }
             threadPool.submit(r);
             while (System.nanoTime() - t < interval.longValue() * 1000) {
@@ -300,23 +303,32 @@ public class TPCCBenchmark {
         threadPool.shutdown();
         threadPool.awaitTermination(10000, TimeUnit.SECONDS);
         logger.info("All queries finished! {}", System.currentTimeMillis() - startTime);
+        
+
         if (transactionManager.equals("bitronix")) {
             printPercentile(mysqlXAConn.updates, "MySQL XA update stats");
             printPercentile(mysqlXAConn.queries, "MySQL XA query stats");
             printPercentile(postgresXAConn.updates, "Postgres XA update stats");
             printPercentile(postgresXAConn.queries, "Postgres XA query stats");
             printPercentile(conn.funcCalls, "XA function stats");
+
+            List<org.dbos.apiary.utilities.Tracer.Stat> stats = tracer.orderStats("XANewOrderFunction");
+            if (stats.size() > 0) {
+                org.dbos.apiary.utilities.Tracer.Stat stat = stats.get(stats.size() / 2);
+                logger.info("XANewOrderFunction, Total {}, Init {}, Exec {}, 2PC {} (Prepare {})", stat.totalTime.get() / 1000, stat.XAInitializationNanos.get() / 1000, stat.XAExecutionNanos.get() / 1000,  stat.XACommitNanos.get() / 1000, stat.XACommitPrepareNanos.get() / 1000);
+            }
+
+            stats = tracer.orderStats("XAPaymentFunction");
+            
+            if (stats.size() > 0) {
+                org.dbos.apiary.utilities.Tracer.Stat stat = stats.get(stats.size() / 2);
+                logger.info("XAPaymentFunction, Total {}, Init {}, Exec {}, 2PC {} (Prepare {})", stat.totalTime.get() / 1000, stat.XAInitializationNanos.get() / 1000, stat.XAExecutionNanos.get() / 1000,  stat.XACommitNanos.get() / 1000, stat.XACommitPrepareNanos.get() / 1000);
+            }
         } else if (transactionManager.equals("XDST")) {
-            logger.info("group flush {}", mconn.groupFlushLogs.get());
+            //logger.info("group flush {}", mconn.groupFlushLogs.get());
             printPercentile(mconn.upserts, "MySQL upsert stats");
             printPercentile(mconn.queries, "MySQL query stats");
             printPercentile(mconn.commits, "MySQL commit stats");
-
-            printPercentile(pconn.upserts, "Postgres upsert stats");
-            printPercentile(pconn.queries, "Postgres query stats");
-            printPercentile(pconn.commits, "Postgres commit stats");
-            printPercentile(pconn.rollbacks, "Postgres rollback stats");
-            printPercentile(pconn.funcCalls, "Postgres function stats");
 
 
             printPercentile(XDSTNewOrderFunction.p1, "XDSTNewOrderFunction.p1");
@@ -324,6 +336,19 @@ public class TPCCBenchmark {
             printPercentile(XDSTNewOrderFunction.p3, "XDSTNewOrderFunction.p3");
             printPercentile(XDSTNewOrderFunction.p4, "XDSTNewOrderFunction.p4");
             printPercentile(XDSTNewOrderFunction.p5, "XDSTNewOrderFunction.p5");
+
+            List<org.dbos.apiary.utilities.Tracer.Stat> stats = tracer.orderStats("XDSTNewOrderFunction");
+
+            if (stats.size() > 0) {
+                org.dbos.apiary.utilities.Tracer.Stat stat = stats.get(stats.size() / 2);
+                logger.info("XDSTNewOrderFunction, Total {}, Init {}, Exec {} (Exec Overhead {}), Validation {}, Commit {}", stat.totalTime.get() / 1000, stat.XDSTInitializationNanos.get() / 1000, stat.XDSTExecutionNanos.get() / 1000, stat.XDSTExecutionOverheadNanos.get() / 1000, stat.XDSTValidationNanos.get() / 1000, stat.XDSTCommitNanos.get() / 1000);
+            }
+
+            stats = tracer.orderStats("XDSTPaymentFunction");
+            if (stats.size() > 0) {
+                org.dbos.apiary.utilities.Tracer.Stat stat = stats.get(stats.size() / 2);
+                logger.info("XDSTPaymentFunction, Total {}, Init {}, Exec {} (Exec Overhead {}), Validation {}, Commit {}", stat.totalTime.get() / 1000, stat.XDSTInitializationNanos.get() / 1000, stat.XDSTExecutionNanos.get() / 1000, stat.XDSTExecutionOverheadNanos.get() / 1000, stat.XDSTValidationNanos.get() / 1000, stat.XDSTCommitNanos.get() / 1000);
+            }
         }
         
         if (apiaryWorker != null) {

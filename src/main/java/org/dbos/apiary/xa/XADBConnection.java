@@ -25,4 +25,8 @@ public abstract interface XADBConnection {
     public abstract ResultSet executeQuery(String procedure, Object... input) throws SQLException;
     
     public abstract void close();
+
+    public abstract void commitNonXAConnection() throws SQLException;
+
+    public abstract void rollbackNonXAConnection() throws SQLException;
 }
